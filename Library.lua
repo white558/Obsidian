@@ -2164,6 +2164,20 @@ function Library:OnUnload(Callback)
 end
 
 function Library:Unload()
+    for _, Toggle in pairs(Toggles) do
+        pcall(function()
+            Toggle:SetValue(false)
+        end)
+    end
+
+    for _, Option in pairs(Options) do
+        pcall(function()
+            if Option.Type == "KeyPicker" then
+                Option:SetValue({ "F15", Option.Mode, {} })
+            end
+        end)
+    end
+
     for Index = #Library.Signals, 1, -1 do
         local Connection = table.remove(Library.Signals, Index)
         if Connection and Connection.Connected then
