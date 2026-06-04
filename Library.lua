@@ -5299,7 +5299,7 @@ do
             end
             table.clear(Buttons)
 
-            if Info.Multi then
+            if Info.Multi and Info.AllowMultiSelectButtons then
                 self:AddButton("Select All", function()
                     local Selected = {}
 
@@ -5340,6 +5340,7 @@ do
 
             local Count = 0
             for _, Value in Values do
+                local FormattedValue = tostring(Info.FormatListValue and Info.FormatListValue(Value) or Value)
 
 
                 Count += 1
@@ -5430,8 +5431,6 @@ do
                         Library:SafeCallback(Dropdown.Changed, Dropdown.Value)
                     end)
                 end
-
-                local FormattedValue = tostring(Info.FormatListValue and Info.FormatListValue(Value) or Value)
 
                 Table.Container = Container
                 Table.FormattedValue = FormattedValue
