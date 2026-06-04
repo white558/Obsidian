@@ -5263,8 +5263,10 @@ do
             local Values = Dropdown.Values
             local DisabledValues = Dropdown.DisabledValues
 
-            for Button, _ in Buttons do
-                Button.Parent:Destroy()
+            for _, Child in MenuTable.Menu:GetChildren() do
+                if not Child:IsA("UIListLayout") then
+                    Child:Destroy()
+                end
             end
             table.clear(Buttons)
 
