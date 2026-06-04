@@ -5113,6 +5113,7 @@ do
             return Dropdown.Value and 1 or 0
         end
 
+        local Buttons = {}
         function Dropdown:AddButton(...)
             local function GetInfo(...)
                 local Info = {}
@@ -5258,13 +5259,20 @@ do
             return Button
         end
 
-        local Buttons = {}
+
         function Dropdown:BuildDropdownList()
             local Values = Dropdown.Values
             local DisabledValues = Dropdown.DisabledValues
 
             for _, Child in MenuTable.Menu:GetChildren() do
-                if not Child:IsA("UIListLayout") then
+                if
+                    not (
+                        Child:IsA("UIListLayout")
+                        or Child:IsA("UIScale")
+                        or Child:IsA("UIStroke")
+                        or Child:IsA("UICorner")
+                    )
+                then
                     Child:Destroy()
                 end
             end
