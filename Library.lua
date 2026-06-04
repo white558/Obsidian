@@ -7019,6 +7019,7 @@ function Library:CreateWindow(WindowInfo)
                 ImageRectOffset = Icon.ImageRectOffset,
                 ImageRectSize = Icon.ImageRectSize,
                 Size = WindowInfo.IconSize,
+                ImageColor3 = "AccentColor",
                 Parent = TitleHolder,
             })
         else
