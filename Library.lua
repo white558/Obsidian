@@ -433,6 +433,7 @@ local Templates = {
         DisabledValues = {},
         Multi = false,
         MaxVisibleDropdownItems = 8,
+        AllowMultiSelectButtons = false,
 
         Callback = function() end,
         Changed = function() end,
@@ -4864,6 +4865,7 @@ do
             Disabled = Info.Disabled,
             Visible = Info.Visible,
 
+            AllowMultiSelectButtons = Info.AllowMultiSelectButtons,
             Type = "Dropdown",
         }
 
@@ -5015,7 +5017,7 @@ do
         function Dropdown:RecalculateListSize(Count)
             local Y = math.clamp((Count or GetTableSize(Dropdown.Values)) * 21, 0, Info.MaxVisibleDropdownItems * 21)
             
-            if Info.Multi then
+            if Info.Multi and Info.AllowMultiSelectButtons then
                 Y = Y + 29
             end
 
@@ -5260,6 +5262,25 @@ do
         end
 
 
+        function Dropdown:Filter()
+            local SearchText = SearchBox and SearchBox.Text:lower() or ""
+            local Count = 0
+
+            for _, Table in Buttons do
+                local Visible = true
+                if SearchText ~= "" then
+                    Visible = Table.FormattedValue:lower():find(SearchText, 1, true) ~= nil
+                end
+
+                Table.Container.Visible = Visible
+                if Visible then
+                    Count = Count + 1
+                end
+            end
+
+            Dropdown:RecalculateListSize(Count)
+        end
+
         function Dropdown:BuildDropdownList()
             local Values = Dropdown.Values
             local DisabledValues = Dropdown.DisabledValues
@@ -5294,18 +5315,20 @@ do
                 end)
             end
 
-            MenuTable.Menu.UIListLayout.Padding = UDim.new(0, Info.Multi and 4 or 0)
+            MenuTable.Menu.UIListLayout.Padding = UDim.new(0, (Info.Multi and Info.AllowMultiSelectButtons) and 4 or 0)
             local ButtonHolder
             if Info.Multi then
-                New("UIPadding", {
-                    PaddingTop = UDim.new(0, 4),
-                    Parent = MenuTable.Menu,
-                })
+                if Info.AllowMultiSelectButtons then
+                    New("UIPadding", {
+                        PaddingTop = UDim.new(0, 4),
+                        Parent = MenuTable.Menu,
+                    })
+                end
 
                 ButtonHolder = New("Frame", {
                     AutomaticSize = Enum.AutomaticSize.Y,
                     BackgroundTransparency = 1,
-                    LayoutOrder = Info.Multi and 1 or 0,
+                    LayoutOrder = (Info.Multi and Info.AllowMultiSelectButtons) and 1 or 0,
                     Size = UDim2.fromScale(1, 0),
                     Parent = MenuTable.Menu,
                 })
@@ -5317,10 +5340,7 @@ do
 
             local Count = 0
             for _, Value in Values do
-                local FormattedValue = tostring(Info.FormatListValue and Info.FormatListValue(Value) or Value)
-                if SearchBox and not FormattedValue:lower():match(SearchBox.Text:lower()) then
-                    continue
-                end
+
 
                 Count += 1
 
@@ -5411,13 +5431,19 @@ do
                     end)
                 end
 
+                local FormattedValue = tostring(Info.FormatListValue and Info.FormatListValue(Value) or Value)
+
+                Table.Container = Container
+                Table.FormattedValue = FormattedValue
+                Table.Value = Value
+
                 Table:UpdateButton()
                 Dropdown:Display()
 
                 Buttons[Button] = Table
             end
 
-            Dropdown:RecalculateListSize(Count)
+            Dropdown:Filter()
         end
 
         function Dropdown:SetValue(Value)
@@ -5551,7 +5577,7 @@ do
         DisplayButton.MouseButton1Click:Connect(ToggleDropdown)
 
         if SearchBox then
-            SearchBox:GetPropertyChangedSignal("Text"):Connect(Dropdown.BuildDropdownList)
+            SearchBox:GetPropertyChangedSignal("Text"):Connect(Dropdown.Filter)
         end
 
         local Defaults = {}
