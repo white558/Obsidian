@@ -6975,17 +6975,18 @@ function Library:CreateWindow(WindowInfo)
         --// Top Bar \\-
         local TopBar = New("Frame", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 48),
+            Size = UDim2.new(1, 0, 1, 0),
             Parent = MainFrame,
+            ZIndex = 0,
         })
         Library:MakeDraggable(MainFrame, TopBar, false, true)
 
         --// Title
         TitleHolder = New("Frame", {
             BackgroundColor3 = "BackgroundColor",
-            Size = UDim2.new(0, InitialLeftWidth - 8, 1, -8),
+            Size = UDim2.new(0, InitialLeftWidth - 8, 0, 48),
             Position = UDim2.fromOffset(4, 4),
-            Parent = TopBar,
+            Parent = MainFrame,
         })
         TitleGlow = New("ImageLabel", {
             BackgroundTransparency = 1,
@@ -7006,6 +7007,13 @@ function Library:CreateWindow(WindowInfo)
             })
         )
         Library:AddOutline(TitleHolder)
+        New("UIPadding", {
+            PaddingBottom = UDim.new(0, 8),
+            PaddingLeft = UDim.new(0, 12),
+            PaddingRight = UDim.new(0, 12),
+            PaddingTop = UDim.new(0, 8),
+            Parent = TitleHolder,
+        })
         New("UIListLayout", {
             FillDirection = Enum.FillDirection.Horizontal,
             HorizontalAlignment = Enum.HorizontalAlignment.Center,
@@ -7054,7 +7062,7 @@ function Library:CreateWindow(WindowInfo)
             AnchorPoint = Vector2.new(1, 0),
             BackgroundColor3 = "BackgroundColor",
             Position = UDim2.new(1, -4, 4, 0),
-            Size = UDim2.new(1, -InitialLeftWidth - 8, 0, 40),
+            Size = UDim2.new(1, -InitialLeftWidth - 8, 0, 48),
             Parent = MainFrame,
         })
         TopRightGlow = New("ImageLabel", {
@@ -7076,11 +7084,17 @@ function Library:CreateWindow(WindowInfo)
             })
         )
         Library:AddOutline(TopRightOuter)
+        New("UIPadding", {
+            PaddingBottom = UDim.new(0, 8),
+            PaddingLeft = UDim.new(0, 12),
+            PaddingRight = UDim.new(0, 12),
+            PaddingTop = UDim.new(0, 8),
+            Parent = TopRightOuter,
+        })
         
         RightWrapper = New("Frame", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, -48, 1, 0),
-            Position = UDim2.new(0, 6, 0, 0),
+            Size = UDim2.new(1, 0, 1, 0),
             Parent = TopRightOuter,
         })
 
@@ -7187,7 +7201,7 @@ function Library:CreateWindow(WindowInfo)
                 Position = UDim2.new(1, -10, 0.5, 0),
                 Size = UDim2.fromOffset(28, 28),
                 SizeConstraint = Enum.SizeConstraint.RelativeYY,
-                Parent = TopBar,
+                Parent = TopRightOuter,
             })
         end
 
@@ -7268,8 +7282,8 @@ function Library:CreateWindow(WindowInfo)
         --// Tabs \\--
         TabsOuter = New("Frame", {
             BackgroundColor3 = "BackgroundColor",
-            Position = UDim2.fromOffset(4, 57),
-            Size = UDim2.new(0, InitialLeftWidth - 8, 1, -86),
+            Position = UDim2.fromOffset(4, 58),
+            Size = UDim2.new(0, InitialLeftWidth - 8, 1, -90),
             Parent = MainFrame,
         })
         TabsGlow = New("ImageLabel", {
@@ -7291,6 +7305,13 @@ function Library:CreateWindow(WindowInfo)
             })
         )
         Library:AddOutline(TabsOuter)
+        New("UIPadding", {
+            PaddingBottom = UDim.new(0, 6),
+            PaddingLeft = UDim.new(0, 6),
+            PaddingRight = UDim.new(0, 6),
+            PaddingTop = UDim.new(0, 6),
+            Parent = TabsOuter,
+        })
         
         Tabs = New("ScrollingFrame", {
             AutomaticCanvasSize = Enum.AutomaticSize.Y,
@@ -7318,8 +7339,8 @@ function Library:CreateWindow(WindowInfo)
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
             end,
             Name = "ContainerOuter",
-            Position = UDim2.new(1, -4, 0, 57),
-            Size = UDim2.new(1, -InitialLeftWidth - 5, 1, -86),
+            Position = UDim2.new(1, -4, 0, 58),
+            Size = UDim2.new(1, -InitialLeftWidth - 5, 1, -90),
             Parent = MainFrame,
         })
         ContainerGlow = New("ImageLabel", {
@@ -7341,6 +7362,13 @@ function Library:CreateWindow(WindowInfo)
             })
         )
         Library:AddOutline(ContainerOuter)
+        New("UIPadding", {
+            PaddingBottom = UDim.new(0, 6),
+            PaddingLeft = UDim.new(0, 6),
+            PaddingRight = UDim.new(0, 6),
+            PaddingTop = UDim.new(0, 6),
+            Parent = ContainerOuter,
+        })
         
         Container = New("Frame", {
             BackgroundTransparency = 1,
@@ -7465,10 +7493,10 @@ function Library:CreateWindow(WindowInfo)
     function Window:SetSidebarWidth(Width)
         Width = math.clamp(Width, 48, MainFrame.Size.X.Offset - WindowInfo.MinContainerWidth - 1)
 
-        TitleHolder.Size = UDim2.new(0, Width - 8, 1, -8)
-        TabsOuter.Size = UDim2.new(0, Width - 8, 1, -86)
-        ContainerOuter.Size = UDim2.new(1, -Width - 5, 1, -86)
-        TopRightOuter.Size = UDim2.new(1, -Width - 8, 0, 40)
+        TitleHolder.Size = UDim2.new(0, Width - 8, 0, 48)
+        TabsOuter.Size = UDim2.new(0, Width - 8, 1, -90)
+        ContainerOuter.Size = UDim2.new(1, -Width - 5, 1, -90)
+        TopRightOuter.Size = UDim2.new(1, -Width - 8, 0, 48)
 
         if WindowInfo.EnableCompacting then
             ApplyCompact()
