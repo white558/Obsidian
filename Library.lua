@@ -6834,9 +6834,7 @@ function Library:SetGlow(State: boolean)
     assert(typeof(State) == "boolean", "Expected boolean for State, got: " .. typeof(State))
 
     self.Scheme.WindowGlow = State
-    for _, glow in ipairs(self.Window.Glow) do
-        glow.Visible = State
-    end
+    self.Window.Glow.Visible = State
     self:UpdateColorsUsingRegistry()
 end
 
@@ -6907,11 +6905,6 @@ function Library:CreateWindow(WindowInfo)
     local BackgroundImage
     local BottomBackground
     local FooterLabel
-    local TopBarSection
-    local TabsSection
-    local MiddleSection
-    local BottomBarSection
-    local Spacing = 8 -- Spacing between sections
 
     local InitialLeftWidth = math.ceil(WindowInfo.Size.X.Offset * 0.3)
     local IsCompact = WindowInfo.SidebarCompacted
@@ -6923,9 +6916,10 @@ function Library:CreateWindow(WindowInfo)
         Library.KeybindFrame.Position = UDim2.new(0, 6, 0.5, 0)
         Library.KeybindFrame.Visible = false
 
-        -- Parent holder frame (for dragging and organizing)
         MainFrame = New("TextButton", {
-            BackgroundTransparency = 1,
+            BackgroundColor3 = function()
+                return Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
+            end,
             Name = "Main",
             Text = "",
             Position = WindowInfo.Position,
@@ -6934,35 +6928,25 @@ function Library:CreateWindow(WindowInfo)
             Parent = ScreenGui,
         })
         table.insert(
+            Library.Corners,
+            New("UICorner", {
+                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                Parent = MainFrame,
+            })
+        )
+        table.insert(
             Library.Scales,
             New("UIScale", {
                 Parent = MainFrame,
             })
         )
-
-        if WindowInfo.Center then
-            MainFrame.Position = UDim2.new(0.5, -MainFrame.Size.X.Offset / 2, 0.5, -MainFrame.Size.Y.Offset / 2)
-        end
-
-        -- Spacing is declared earlier
-
-        -- 1. Top Bar (Title) section
-        TopBarSection = New("Frame", {
-            BackgroundColor3 = function()
-                return Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
-            end,
-            Size = UDim2.new(1, 0, 0, 48),
-            Parent = MainFrame,
+        Library:AddOutline(MainFrame)
+        Library:MakeLine(MainFrame, {
+            Position = UDim2.fromOffset(0, 48),
+            Size = UDim2.new(1, 0, 0, 1),
         })
-        table.insert(
-            Library.Corners,
-            New("UICorner", {
-                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                Parent = TopBarSection,
-            })
-        )
-        Library:AddOutline(TopBarSection)
-        local TopBarGlow = New("ImageLabel", {
+
+        Glow = New("ImageLabel", {
             BackgroundTransparency = 1,
             Position = UDim2.fromOffset(-20, -20),
             Size = UDim2.new(1, 40, 1, 40),
@@ -6971,15 +6955,54 @@ function Library:CreateWindow(WindowInfo)
             ImageColor3 = function()
                 return Library:GetBetterColor(Library.Scheme.AccentColor, -1)
             end,
-            Parent = TopBarSection,
+            Parent = MainFrame,
         })
-        Library:MakeDraggable(MainFrame, TopBarSection, false, true)
 
-        -- Title content inside TopBarSection
+        DividerLine = New("Frame", {
+            BackgroundColor3 = "OutlineColor",
+            Position = UDim2.fromOffset(InitialLeftWidth, 0),
+            Size = UDim2.new(0, 1, 1, -21),
+            Parent = MainFrame,
+        })
+
+        
+        BackgroundImage = New("ImageLabel", {
+            Image = WindowInfo.BackgroundImage,
+            Position = UDim2.fromScale(0, 0),
+            Size = UDim2.fromScale(1, 1),
+            ScaleType = Enum.ScaleType.Stretch,
+            ZIndex = 999,
+            BackgroundTransparency = 1,
+            ImageTransparency = 0.75,
+            Visible = WindowInfo.BackgroundImage and true or false,
+            Parent = MainFrame,
+        })
+
+        table.insert(
+            Library.Corners,
+            New("UICorner", {
+                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                Parent = BackgroundImage,
+            })
+        )
+
+        if WindowInfo.Center then
+            MainFrame.Position = UDim2.new(0.5, -MainFrame.Size.X.Offset / 2, 0.5, -MainFrame.Size.Y.Offset / 2)
+        end
+
+        --// Top Bar \\-
+        local TopBar = New("Frame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 48),
+            Parent = MainFrame,
+        })
+        Library:MakeDraggable(MainFrame, TopBar, false, true)
+
+        --// Title
         TitleHolder = New("Frame", {
             BackgroundTransparency = 1,
             Size = UDim2.new(0, InitialLeftWidth, 1, 0),
-            Parent = TopBarSection,
+            Parent = TopBar,
         })
         New("UIListLayout", {
             FillDirection = Enum.FillDirection.Horizontal,
@@ -7024,13 +7047,13 @@ function Library:CreateWindow(WindowInfo)
             Parent = TitleHolder,
         })
 
-        -- Top Right Bar inside TopBarSection
+        --// Top Right Bar
         RightWrapper = New("Frame", {
             AnchorPoint = Vector2.new(1, 0.5),
             BackgroundTransparency = 1,
             Position = UDim2.new(1, -49, 0.5, 0),
             Size = UDim2.new(1, -InitialLeftWidth - 57 - 1, 1, -16),
-            Parent = TopBarSection,
+            Parent = TopBar,
         })
 
         New("UIListLayout", {
@@ -7136,119 +7159,29 @@ function Library:CreateWindow(WindowInfo)
                 Position = UDim2.new(1, -10, 0.5, 0),
                 Size = UDim2.fromOffset(28, 28),
                 SizeConstraint = Enum.SizeConstraint.RelativeYY,
-                Parent = TopBarSection,
+                Parent = TopBar,
             })
         end
 
-        -- 2. Middle section (Tabs + Container)
-        MiddleSection = New("Frame", {
-            BackgroundTransparency = 1,
-            Position = UDim2.new(0, 0, 0, 48 + Spacing),
-            Size = UDim2.new(1, 0, 1, -48 - 20 - Spacing * 2), -- Subtract top bar, bottom bar, and spacing
-            Parent = MainFrame,
-        })
-
-        -- Split middle section into Tabs (left) and Container (right)
-        TabsSection = New("Frame", {
-            BackgroundColor3 = function()
-                return Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
-            end,
-            Size = UDim2.new(0, InitialLeftWidth, 1, 0),
-            Parent = MiddleSection,
-        })
-        table.insert(
-            Library.Corners,
-            New("UICorner", {
-                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                Parent = TabsSection,
-            })
-        )
-        Library:AddOutline(TabsSection)
-        local TabsGlow = New("ImageLabel", {
-            BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(-20, -20),
-            Size = UDim2.new(1, 40, 1, 40),
-            ZIndex = -1,
-            Image = CustomImageManager.GetAsset("Glow"),
-            ImageColor3 = function()
-                return Library:GetBetterColor(Library.Scheme.AccentColor, -1)
-            end,
-            Parent = TabsSection,
-        })
-
-        -- Container section (right side of middle)
-        Container = New("Frame", {
-            AnchorPoint = Vector2.new(1, 0),
-            BackgroundColor3 = function()
-                return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
-            end,
-            Name = "Container",
-            Position = UDim2.new(1, 0, 0, 0),
-            Size = UDim2.new(1, -InitialLeftWidth - Spacing, 1, 0),
-            Parent = MiddleSection,
-        })
-        table.insert(
-            Library.Corners,
-            New("UICorner", {
-                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                Parent = Container,
-            })
-        )
-        Library:AddOutline(Container)
-        local ContainerGlow = New("ImageLabel", {
-            BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(-20, -20),
-            Size = UDim2.new(1, 40, 1, 40),
-            ZIndex = -1,
-            Image = CustomImageManager.GetAsset("Glow"),
-            ImageColor3 = function()
-                return Library:GetBetterColor(Library.Scheme.AccentColor, -1)
-            end,
-            Parent = Container,
-        })
-        New("UIPadding", {
-            PaddingBottom = UDim.new(0, 0),
-            PaddingLeft = UDim.new(0, 6),
-            PaddingRight = UDim.new(0, 6),
-            PaddingTop = UDim.new(0, 0),
-            Parent = Container,
-        })
-
-        -- Divider line (between tabs and container)
-        DividerLine = New("Frame", {
-            BackgroundColor3 = "OutlineColor",
-            Position = UDim2.fromOffset(InitialLeftWidth, 0),
-            Size = UDim2.new(0, 1, 1, 0),
-            Parent = MiddleSection,
-        })
-
-        -- Tabs inside TabsSection
-        Tabs = New("ScrollingFrame", {
-            AutomaticCanvasSize = Enum.AutomaticSize.Y,
-            BackgroundTransparency = 1,
-            CanvasSize = UDim2.fromScale(0, 0),
-            Position = UDim2.fromOffset(0, 0),
-            ScrollBarThickness = 0,
-            Size = UDim2.new(1, 0, 1, 0),
-            Parent = TabsSection,
-        })
-        New("UIListLayout", {
-            Parent = Tabs,
-        })
-        New("UIPadding", {
-            PaddingBottom = UDim.new(0, 4),
-            PaddingLeft = UDim.new(0, 4),
-            PaddingRight = UDim.new(0, 4),
-            PaddingTop = UDim.new(0, 4),
-            Parent = Tabs,
-        })
-
-        -- 3. Bottom Bar (Footer) section
-        local BottomBarSection = New("Frame", {
+        --// Bottom Bar \\--
+        BottomBackground = New("Frame", {
             AnchorPoint = Vector2.new(0, 1),
             BackgroundColor3 = function()
-                return Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
+                return Library:GetBetterColor(Library.Scheme.BackgroundColor, 4)
             end,
+            Position = UDim2.fromScale(0, 1),
+            Size = UDim2.new(1, 0, 0, 20 + WindowInfo.CornerRadius),
+            Parent = MainFrame
+        })
+        Library:MakeLine(MainFrame, {
+            AnchorPoint = Vector2.new(0, 1),
+            Position = UDim2.new(0, 0, 1, -20),
+            Size = UDim2.new(1, 0, 0, 1),
+        })
+
+        local BottomBar = New("Frame", {
+            AnchorPoint = Vector2.new(0, 1),
+            BackgroundTransparency = 1,
             Position = UDim2.fromScale(0, 1),
             Size = UDim2.new(1, 0, 0, 20),
             Parent = MainFrame,
@@ -7257,33 +7190,21 @@ function Library:CreateWindow(WindowInfo)
             Library.Corners,
             New("UICorner", {
                 CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                Parent = BottomBarSection,
+                Parent = BottomBackground,
             })
         )
-        Library:AddOutline(BottomBarSection)
-        local BottomBarGlow = New("ImageLabel", {
-            BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(-20, -20),
-            Size = UDim2.new(1, 40, 1, 40),
-            ZIndex = -1,
-            Image = CustomImageManager.GetAsset("Glow"),
-            ImageColor3 = function()
-                return Library:GetBetterColor(Library.Scheme.AccentColor, -1)
-            end,
-            Parent = BottomBarSection,
-        })
 
-        -- Footer content
+        --// Footer
         FooterLabel = New("TextLabel", {
             BackgroundTransparency = 1,
             Size = UDim2.fromScale(1, 1),
             Text = WindowInfo.Footer,
             TextSize = 14,
             TextTransparency = 0.5,
-            Parent = BottomBarSection,
+            Parent = BottomBar,
         })
 
-        -- Resize Button (still on bottom bar for resizing the whole window)
+        --// Resize Button
         if WindowInfo.Resizable then
             ResizeButton = New("TextButton", {
                 AnchorPoint = Vector2.new(1, 0),
@@ -7292,7 +7213,7 @@ function Library:CreateWindow(WindowInfo)
                 Size = UDim2.fromScale(1, 1),
                 SizeConstraint = Enum.SizeConstraint.RelativeYY,
                 Text = "",
-                Parent = BottomBarSection,
+                Parent = BottomBar,
             })
 
             Library:MakeResizable(MainFrame, ResizeButton, function()
@@ -7313,8 +7234,45 @@ function Library:CreateWindow(WindowInfo)
             Parent = ResizeButton,
         })
 
-        -- Store all glows for easy toggling
-        Glow = {TopBarGlow, TabsGlow, ContainerGlow, BottomBarGlow}
+        --// Tabs \\--
+        Tabs = New("ScrollingFrame", {
+            AutomaticCanvasSize = Enum.AutomaticSize.Y,
+            BackgroundColor3 = "BackgroundColor",
+            CanvasSize = UDim2.fromScale(0, 0),
+            Position = UDim2.fromOffset(0, 49),
+            ScrollBarThickness = 0,
+            Size = UDim2.new(0, InitialLeftWidth, 1, -70),
+            Parent = MainFrame,
+        })
+        New("UIListLayout", {
+            Parent = Tabs,
+        })
+        New("UIPadding", {
+            PaddingBottom = UDim.new(0, 4),
+            PaddingLeft = UDim.new(0, 4),
+            PaddingRight = UDim.new(0, 4),
+            PaddingTop = UDim.new(0, 4),
+            Parent = Tabs,
+        })
+
+        --// Container \\--
+        Container = New("Frame", {
+            AnchorPoint = Vector2.new(1, 0),
+            BackgroundColor3 = function()
+                return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
+            end,
+            Name = "Container",
+            Position = UDim2.new(1, 0, 0, 49),
+            Size = UDim2.new(1, -InitialLeftWidth - 1, 1, -70),
+            Parent = MainFrame,
+        })
+        New("UIPadding", {
+            PaddingBottom = UDim.new(0, 0),
+            PaddingLeft = UDim.new(0, 6),
+            PaddingRight = UDim.new(0, 6),
+            PaddingTop = UDim.new(0, 0),
+            Parent = Container,
+        })
     end
 
     --// Window Table \\--
@@ -7424,17 +7382,12 @@ function Library:CreateWindow(WindowInfo)
     function Window:SetSidebarWidth(Width)
         Width = math.clamp(Width, 48, MainFrame.Size.X.Offset - WindowInfo.MinContainerWidth - 1)
 
-        -- Update TabsSection and Container in MiddleSection
-        local TabsSection = MiddleSection:FindFirstChildOfClass("Frame") -- Find TabsSection
-        if TabsSection then
-            TabsSection.Size = UDim2.new(0, Width, 1, 0)
-        end
-        Container.Size = UDim2.new(1, -Width - Spacing, 1, 0)
         DividerLine.Position = UDim2.fromOffset(Width, 0)
 
-        -- Update TitleHolder and RightWrapper in TopBarSection
         TitleHolder.Size = UDim2.new(0, Width, 1, 0)
         RightWrapper.Size = UDim2.new(1, -Width - 57 - 1, 1, -16)
+        Tabs.Size = UDim2.new(0, Width, 1, -70)
+        Container.Size = UDim2.new(1, -Width - 1, 1, -70)
 
         if WindowInfo.EnableCompacting then
             ApplyCompact()
