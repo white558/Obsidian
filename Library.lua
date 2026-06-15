@@ -6918,9 +6918,7 @@ function Library:CreateWindow(WindowInfo)
         Library.KeybindFrame.Visible = false
 
         MainFrame = New("TextButton", {
-            BackgroundColor3 = function()
-                return Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
-            end,
+            BackgroundTransparency = 1,
             Name = "Main",
             Text = "",
             Position = WindowInfo.Position,
@@ -6929,23 +6927,12 @@ function Library:CreateWindow(WindowInfo)
             Parent = ScreenGui,
         })
         table.insert(
-            Library.Corners,
-            New("UICorner", {
-                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                Parent = MainFrame,
-            })
-        )
-        table.insert(
             Library.Scales,
             New("UIScale", {
                 Parent = MainFrame,
             })
         )
-        Library:AddOutline(MainFrame)
-        Library:MakeLine(MainFrame, {
-            Position = UDim2.fromOffset(0, 48),
-            Size = UDim2.new(1, 0, 0, 1),
-        })
+
 
         Glow = New("ImageLabel", {
             BackgroundTransparency = 1,
@@ -7171,25 +7158,10 @@ function Library:CreateWindow(WindowInfo)
         --// Bottom Bar \\--
         BottomBackground = New("Frame", {
             AnchorPoint = Vector2.new(0, 1),
-            BackgroundColor3 = function()
-                return Library:GetBetterColor(Library.Scheme.BackgroundColor, 4)
-            end,
-            Position = UDim2.fromScale(0, 1),
-            Size = UDim2.new(1, 0, 0, 20 + WindowInfo.CornerRadius),
+            BackgroundColor3 = "BackgroundColor",
+            Position = UDim2.new(0, 4, 1, -4),
+            Size = UDim2.new(1, -8, 0, 20),
             Parent = MainFrame
-        })
-        Library:MakeLine(MainFrame, {
-            AnchorPoint = Vector2.new(0, 1),
-            Position = UDim2.new(0, 0, 1, -20),
-            Size = UDim2.new(1, 0, 0, 1),
-        })
-
-        local BottomBar = New("Frame", {
-            AnchorPoint = Vector2.new(0, 1),
-            BackgroundTransparency = 1,
-            Position = UDim2.fromScale(0, 1),
-            Size = UDim2.new(1, 0, 0, 20),
-            Parent = MainFrame,
         })
         table.insert(
             Library.Corners,
@@ -7198,6 +7170,13 @@ function Library:CreateWindow(WindowInfo)
                 Parent = BottomBackground,
             })
         )
+        Library:AddOutline(BottomBackground)
+
+        local BottomBar = New("Frame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 1, 0),
+            Parent = BottomBackground,
+        })
 
         --// Footer
         FooterLabel = New("TextLabel", {
@@ -7214,7 +7193,7 @@ function Library:CreateWindow(WindowInfo)
             ResizeButton = New("TextButton", {
                 AnchorPoint = Vector2.new(1, 0),
                 BackgroundTransparency = 1,
-                Position = UDim2.new(1, -WindowInfo.CornerRadius / 4, 0, 0),
+                Position = UDim2.new(1, 0, 0, 0),
                 Size = UDim2.fromScale(1, 1),
                 SizeConstraint = Enum.SizeConstraint.RelativeYY,
                 Text = "",
@@ -7361,9 +7340,6 @@ function Library:CreateWindow(WindowInfo)
 
         Library.CornerRadius = Radius
         WindowInfo.CornerRadius = Radius
-
-        ResizeButton.Position = UDim2.new(1, -Radius / 4, 0, 0)
-        BottomBackground.Size = UDim2.new(1, 0, 0, 20 + Radius)
 
         for _, Tab in Library.Tabs do
             if Tab.IsKeyTab then
