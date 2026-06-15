@@ -7135,25 +7135,115 @@ function Library:CreateWindow(WindowInfo)
             })
         end
 
-        --// Bottom Bar \\--
-        BottomBackground = New("Frame", {
-            AnchorPoint = Vector2.new(0, 1),
-            BackgroundColor3 = function()
-                return Library:GetBetterColor(Library.Scheme.BackgroundColor, 4)
-            end,
-            Position = UDim2.fromScale(0, 1),
-            Size = UDim2.new(1, 0, 0, 20 + WindowInfo.CornerRadius),
-            Parent = MainFrame
-        })
-        Library:MakeLine(MainFrame, {
-            AnchorPoint = Vector2.new(0, 1),
-            Position = UDim2.new(0, 0, 1, -20),
-            Size = UDim2.new(1, 0, 0, 1),
+        -- 2. Middle section (Tabs + Container)
+        local MiddleSection = New("Frame", {
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0, 0, 0, 48 + Spacing),
+            Size = UDim2.new(1, 0, 1, -48 - 20 - Spacing * 2), -- Subtract top bar, bottom bar, and spacing
+            Parent = MainFrame,
         })
 
-        local BottomBar = New("Frame", {
-            AnchorPoint = Vector2.new(0, 1),
+        -- Split middle section into Tabs (left) and Container (right)
+        local TabsSection = New("Frame", {
+            BackgroundColor3 = function()
+                return Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
+            end,
+            Size = UDim2.new(0, InitialLeftWidth, 1, 0),
+            Parent = MiddleSection,
+        })
+        table.insert(
+            Library.Corners,
+            New("UICorner", {
+                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                Parent = TabsSection,
+            })
+        )
+        Library:AddOutline(TabsSection)
+        local TabsGlow = New("ImageLabel", {
             BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(-20, -20),
+            Size = UDim2.new(1, 40, 1, 40),
+            ZIndex = -1,
+            Image = CustomImageManager.GetAsset("Glow"),
+            ImageColor3 = function()
+                return Library:GetBetterColor(Library.Scheme.AccentColor, -1)
+            end,
+            Parent = TabsSection,
+        })
+
+        -- Container section (right side of middle)
+        Container = New("Frame", {
+            AnchorPoint = Vector2.new(1, 0),
+            BackgroundColor3 = function()
+                return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
+            end,
+            Name = "Container",
+            Position = UDim2.new(1, 0, 0, 0),
+            Size = UDim2.new(1, -InitialLeftWidth - Spacing, 1, 0),
+            Parent = MiddleSection,
+        })
+        table.insert(
+            Library.Corners,
+            New("UICorner", {
+                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                Parent = Container,
+            })
+        )
+        Library:AddOutline(Container)
+        local ContainerGlow = New("ImageLabel", {
+            BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(-20, -20),
+            Size = UDim2.new(1, 40, 1, 40),
+            ZIndex = -1,
+            Image = CustomImageManager.GetAsset("Glow"),
+            ImageColor3 = function()
+                return Library:GetBetterColor(Library.Scheme.AccentColor, -1)
+            end,
+            Parent = Container,
+        })
+        New("UIPadding", {
+            PaddingBottom = UDim.new(0, 0),
+            PaddingLeft = UDim.new(0, 6),
+            PaddingRight = UDim.new(0, 6),
+            PaddingTop = UDim.new(0, 0),
+            Parent = Container,
+        })
+
+        -- Divider line (between tabs and container)
+        DividerLine = New("Frame", {
+            BackgroundColor3 = "OutlineColor",
+            Position = UDim2.fromOffset(InitialLeftWidth, 0),
+            Size = UDim2.new(0, 1, 1, 0),
+            Parent = MiddleSection,
+        })
+
+        -- Tabs inside TabsSection
+        Tabs = New("ScrollingFrame", {
+            AutomaticCanvasSize = Enum.AutomaticSize.Y,
+            BackgroundTransparency = 1,
+            CanvasSize = UDim2.fromScale(0, 0),
+            Position = UDim2.fromOffset(0, 0),
+            ScrollBarThickness = 0,
+            Size = UDim2.new(1, 0, 1, 0),
+            Parent = TabsSection,
+        })
+        New("UIListLayout", {
+            Parent = Tabs,
+        })
+        New("UIPadding", {
+            PaddingBottom = UDim.new(0, 4),
+            PaddingLeft = UDim.new(0, 4),
+            PaddingRight = UDim.new(0, 4),
+            PaddingTop = UDim.new(0, 4),
+            Parent = Tabs,
+        })
+
+        -- 3. Bottom Bar (Footer) section
+        local BottomBarSection = New("Frame", {
+            AnchorPoint = Vector2.new(0, 1),
+            BackgroundColor3 = function()
+                return Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
+            end,
             Position = UDim2.fromScale(0, 1),
             Size = UDim2.new(1, 0, 0, 20),
             Parent = MainFrame,
@@ -7162,21 +7252,33 @@ function Library:CreateWindow(WindowInfo)
             Library.Corners,
             New("UICorner", {
                 CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                Parent = BottomBackground,
+                Parent = BottomBarSection,
             })
         )
+        Library:AddOutline(BottomBarSection)
+        local BottomBarGlow = New("ImageLabel", {
+            BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(-20, -20),
+            Size = UDim2.new(1, 40, 1, 40),
+            ZIndex = -1,
+            Image = CustomImageManager.GetAsset("Glow"),
+            ImageColor3 = function()
+                return Library:GetBetterColor(Library.Scheme.AccentColor, -1)
+            end,
+            Parent = BottomBarSection,
+        })
 
-        --// Footer
+        -- Footer content
         FooterLabel = New("TextLabel", {
             BackgroundTransparency = 1,
             Size = UDim2.fromScale(1, 1),
             Text = WindowInfo.Footer,
             TextSize = 14,
             TextTransparency = 0.5,
-            Parent = BottomBar,
+            Parent = BottomBarSection,
         })
 
-        --// Resize Button
+        -- Resize Button (still on bottom bar for resizing the whole window)
         if WindowInfo.Resizable then
             ResizeButton = New("TextButton", {
                 AnchorPoint = Vector2.new(1, 0),
@@ -7185,7 +7287,7 @@ function Library:CreateWindow(WindowInfo)
                 Size = UDim2.fromScale(1, 1),
                 SizeConstraint = Enum.SizeConstraint.RelativeYY,
                 Text = "",
-                Parent = BottomBar,
+                Parent = BottomBarSection,
             })
 
             Library:MakeResizable(MainFrame, ResizeButton, function()
@@ -7206,45 +7308,8 @@ function Library:CreateWindow(WindowInfo)
             Parent = ResizeButton,
         })
 
-        --// Tabs \\--
-        Tabs = New("ScrollingFrame", {
-            AutomaticCanvasSize = Enum.AutomaticSize.Y,
-            BackgroundColor3 = "BackgroundColor",
-            CanvasSize = UDim2.fromScale(0, 0),
-            Position = UDim2.fromOffset(0, 49),
-            ScrollBarThickness = 0,
-            Size = UDim2.new(0, InitialLeftWidth, 1, -70),
-            Parent = MainFrame,
-        })
-        New("UIListLayout", {
-            Parent = Tabs,
-        })
-        New("UIPadding", {
-            PaddingBottom = UDim.new(0, 4),
-            PaddingLeft = UDim.new(0, 4),
-            PaddingRight = UDim.new(0, 4),
-            PaddingTop = UDim.new(0, 4),
-            Parent = Tabs,
-        })
-
-        --// Container \\--
-        Container = New("Frame", {
-            AnchorPoint = Vector2.new(1, 0),
-            BackgroundColor3 = function()
-                return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
-            end,
-            Name = "Container",
-            Position = UDim2.new(1, 0, 0, 49),
-            Size = UDim2.new(1, -InitialLeftWidth - 1, 1, -70),
-            Parent = MainFrame,
-        })
-        New("UIPadding", {
-            PaddingBottom = UDim.new(0, 0),
-            PaddingLeft = UDim.new(0, 6),
-            PaddingRight = UDim.new(0, 6),
-            PaddingTop = UDim.new(0, 0),
-            Parent = Container,
-        })
+        -- Store all glows for easy toggling
+        Glow = {TopBarGlow, TabsGlow, ContainerGlow, BottomBarGlow}
     end
 
     --// Window Table \\--
@@ -7354,12 +7419,17 @@ function Library:CreateWindow(WindowInfo)
     function Window:SetSidebarWidth(Width)
         Width = math.clamp(Width, 48, MainFrame.Size.X.Offset - WindowInfo.MinContainerWidth - 1)
 
+        -- Update TabsSection and Container in MiddleSection
+        local TabsSection = MiddleSection:FindFirstChildOfClass("Frame") -- Find TabsSection
+        if TabsSection then
+            TabsSection.Size = UDim2.new(0, Width, 1, 0)
+        end
+        Container.Size = UDim2.new(1, -Width - Spacing, 1, 0)
         DividerLine.Position = UDim2.fromOffset(Width, 0)
 
+        -- Update TitleHolder and RightWrapper in TopBarSection
         TitleHolder.Size = UDim2.new(0, Width, 1, 0)
         RightWrapper.Size = UDim2.new(1, -Width - 57 - 1, 1, -16)
-        Tabs.Size = UDim2.new(0, Width, 1, -70)
-        Container.Size = UDim2.new(1, -Width - 1, 1, -70)
 
         if WindowInfo.EnableCompacting then
             ApplyCompact()
