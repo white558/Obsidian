@@ -6889,8 +6889,8 @@ function Library:CreateWindow(WindowInfo)
 
     local IsDefaultSearchbarSize = WindowInfo.SearchbarSize == UDim2.fromScale(1, 1)
     local MainFrame
-        local Glow
-        local TitleHolder
+    local Glow
+    local TitleHolder
     local WindowTitle
     local WindowIcon
     local RightWrapper
@@ -6900,7 +6900,9 @@ function Library:CreateWindow(WindowInfo)
     local CurrentTabDescription
     local ResizeButton
     local Tabs
+    local TabsOuter
     local Container
+    local ContainerOuter
     local BackgroundImage
     local BottomBackground
     local FooterLabel
@@ -7238,7 +7240,7 @@ function Library:CreateWindow(WindowInfo)
         })
 
         --// Tabs \\--
-        local TabsOuter = New("Frame", {
+        TabsOuter = New("Frame", {
             BackgroundColor3 = "BackgroundColor",
             Position = UDim2.fromOffset(4, 57),
             Size = UDim2.new(0, InitialLeftWidth - 8, 1, -78),
@@ -7273,7 +7275,7 @@ function Library:CreateWindow(WindowInfo)
         })
 
         --// Container \\--
-        local ContainerOuter = New("Frame", {
+        ContainerOuter = New("Frame", {
             AnchorPoint = Vector2.new(1, 0),
             BackgroundColor3 = function()
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
