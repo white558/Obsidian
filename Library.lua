@@ -6834,7 +6834,11 @@ function Library:SetGlow(State: boolean)
     assert(typeof(State) == "boolean", "Expected boolean for State, got: " .. typeof(State))
 
     self.Scheme.WindowGlow = State
-    self.Window.Glow.Visible = State
+    self.Window.TitleGlow.Visible = State
+    self.Window.TopRightGlow.Visible = State
+    self.Window.TabsGlow.Visible = State
+    self.Window.ContainerGlow.Visible = State
+    self.Window.BottomGlow.Visible = State
     self:UpdateColorsUsingRegistry()
 end
 
@@ -6889,10 +6893,12 @@ function Library:CreateWindow(WindowInfo)
 
     local IsDefaultSearchbarSize = WindowInfo.SearchbarSize == UDim2.fromScale(1, 1)
     local MainFrame
-    local Glow
     local TitleHolder
+    local TitleGlow
     local WindowTitle
     local WindowIcon
+    local TopRightOuter
+    local TopRightGlow
     local RightWrapper
     local SearchBox
     local CurrentTabInfo
@@ -6901,10 +6907,13 @@ function Library:CreateWindow(WindowInfo)
     local ResizeButton
     local Tabs
     local TabsOuter
+    local TabsGlow
     local Container
     local ContainerOuter
+    local ContainerGlow
     local BackgroundImage
     local BottomBackground
+    local BottomGlow
     local FooterLabel
 
     local InitialLeftWidth = math.ceil(WindowInfo.Size.X.Offset * 0.3)
@@ -6934,17 +6943,7 @@ function Library:CreateWindow(WindowInfo)
         )
 
 
-        Glow = New("ImageLabel", {
-            BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(-20, -20),
-            Size = UDim2.new(1, 40, 1, 40),
-            ZIndex = -1,
-            Image = CustomImageManager.GetAsset("Glow"),
-            ImageColor3 = function()
-                return Library:GetBetterColor(Library.Scheme.AccentColor, -1)
-            end,
-            Parent = MainFrame,
-        })
+
 
         -- Divider line removed since blocks are now separated
 
@@ -6987,6 +6986,17 @@ function Library:CreateWindow(WindowInfo)
             Size = UDim2.new(0, InitialLeftWidth - 8, 1, -8),
             Position = UDim2.fromOffset(4, 4),
             Parent = TopBar,
+        })
+        TitleGlow = New("ImageLabel", {
+            BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(-20, -20),
+            Size = UDim2.new(1, 40, 1, 40),
+            ZIndex = -1,
+            Image = CustomImageManager.GetAsset("Glow"),
+            ImageColor3 = function()
+                return Library:GetBetterColor(Library.Scheme.AccentColor, -1)
+            end,
+            Parent = TitleHolder,
         })
         table.insert(
             Library.Corners,
@@ -7040,12 +7050,38 @@ function Library:CreateWindow(WindowInfo)
         })
 
         --// Top Right Bar
-        RightWrapper = New("Frame", {
-            AnchorPoint = Vector2.new(1, 0.5),
+        TopRightOuter = New("Frame", {
+            AnchorPoint = Vector2.new(1, 0),
+            BackgroundColor3 = "BackgroundColor",
+            Position = UDim2.new(1, -4, 4, 0),
+            Size = UDim2.new(1, -InitialLeftWidth - 8, 0, 40),
+            Parent = MainFrame,
+        })
+        TopRightGlow = New("ImageLabel", {
             BackgroundTransparency = 1,
-            Position = UDim2.new(1, -49, 0.5, 0),
-            Size = UDim2.new(1, -InitialLeftWidth - 57 - 1, 1, -16),
-            Parent = TopBar,
+            Position = UDim2.fromOffset(-20, -20),
+            Size = UDim2.new(1, 40, 1, 40),
+            ZIndex = -1,
+            Image = CustomImageManager.GetAsset("Glow"),
+            ImageColor3 = function()
+                return Library:GetBetterColor(Library.Scheme.AccentColor, -1)
+            end,
+            Parent = TopRightOuter,
+        })
+        table.insert(
+            Library.Corners,
+            New("UICorner", {
+                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                Parent = TopRightOuter,
+            })
+        )
+        Library:AddOutline(TopRightOuter)
+        
+        RightWrapper = New("Frame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, -48, 1, 0),
+            Position = UDim2.new(0, 6, 0, 0),
+            Parent = TopRightOuter,
         })
 
         New("UIListLayout", {
@@ -7160,8 +7196,19 @@ function Library:CreateWindow(WindowInfo)
             AnchorPoint = Vector2.new(0, 1),
             BackgroundColor3 = "BackgroundColor",
             Position = UDim2.new(0, 4, 1, -4),
-            Size = UDim2.new(1, -8, 0, 20),
+            Size = UDim2.new(1, -8, 0, 24),
             Parent = MainFrame
+        })
+        BottomGlow = New("ImageLabel", {
+            BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(-20, -20),
+            Size = UDim2.new(1, 40, 1, 40),
+            ZIndex = -1,
+            Image = CustomImageManager.GetAsset("Glow"),
+            ImageColor3 = function()
+                return Library:GetBetterColor(Library.Scheme.AccentColor, -1)
+            end,
+            Parent = BottomBackground,
         })
         table.insert(
             Library.Corners,
@@ -7222,8 +7269,19 @@ function Library:CreateWindow(WindowInfo)
         TabsOuter = New("Frame", {
             BackgroundColor3 = "BackgroundColor",
             Position = UDim2.fromOffset(4, 57),
-            Size = UDim2.new(0, InitialLeftWidth - 8, 1, -78),
+            Size = UDim2.new(0, InitialLeftWidth - 8, 1, -86),
             Parent = MainFrame,
+        })
+        TabsGlow = New("ImageLabel", {
+            BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(-20, -20),
+            Size = UDim2.new(1, 40, 1, 40),
+            ZIndex = -1,
+            Image = CustomImageManager.GetAsset("Glow"),
+            ImageColor3 = function()
+                return Library:GetBetterColor(Library.Scheme.AccentColor, -1)
+            end,
+            Parent = TabsOuter,
         })
         table.insert(
             Library.Corners,
@@ -7261,8 +7319,19 @@ function Library:CreateWindow(WindowInfo)
             end,
             Name = "ContainerOuter",
             Position = UDim2.new(1, -4, 0, 57),
-            Size = UDim2.new(1, -InitialLeftWidth - 5, 1, -78),
+            Size = UDim2.new(1, -InitialLeftWidth - 5, 1, -86),
             Parent = MainFrame,
+        })
+        ContainerGlow = New("ImageLabel", {
+            BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(-20, -20),
+            Size = UDim2.new(1, 40, 1, 40),
+            ZIndex = -1,
+            Image = CustomImageManager.GetAsset("Glow"),
+            ImageColor3 = function()
+                return Library:GetBetterColor(Library.Scheme.AccentColor, -1)
+            end,
+            Parent = ContainerOuter,
         })
         table.insert(
             Library.Corners,
@@ -7291,7 +7360,11 @@ function Library:CreateWindow(WindowInfo)
     --// Window Table \\--
     local Window = {
         BackgroundImage = BackgroundImage,
-        Glow = Glow,
+        TitleGlow = TitleGlow,
+        TopRightGlow = TopRightGlow,
+        TabsGlow = TabsGlow,
+        ContainerGlow = ContainerGlow,
+        BottomGlow = BottomGlow,
     }
 
     function Window:ChangeTitle(title)
@@ -7393,9 +7466,9 @@ function Library:CreateWindow(WindowInfo)
         Width = math.clamp(Width, 48, MainFrame.Size.X.Offset - WindowInfo.MinContainerWidth - 1)
 
         TitleHolder.Size = UDim2.new(0, Width - 8, 1, -8)
-        TabsOuter.Size = UDim2.new(0, Width - 8, 1, -78)
-        ContainerOuter.Size = UDim2.new(1, -Width - 5, 1, -78)
-        RightWrapper.Size = UDim2.new(1, -Width - 57 - 1, 1, -16)
+        TabsOuter.Size = UDim2.new(0, Width - 8, 1, -86)
+        ContainerOuter.Size = UDim2.new(1, -Width - 5, 1, -86)
+        TopRightOuter.Size = UDim2.new(1, -Width - 8, 0, 40)
 
         if WindowInfo.EnableCompacting then
             ApplyCompact()
