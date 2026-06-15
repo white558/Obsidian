@@ -6998,29 +6998,11 @@ function Library:CreateWindow(WindowInfo)
         })
         Library:MakeDraggable(MainFrame, TopBar, false, true)
 
-        --// Title (separated background)
-        TitleBackground = New("Frame", {
-            BackgroundColor3 = "MainColor",
-            Size = UDim2.new(0, InitialLeftWidth, 1, 0),
-            Parent = TopBar,
-        })
-        table.insert(
-            Library.Corners,
-            New("UICorner", {
-                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                Parent = TitleBackground,
-            })
-        )
-        New("UIStroke", {
-            Color = "OutlineColor",
-            Parent = TitleBackground,
-        })
-
-        --// Title holder sits inside the title background
+        --// Title
         TitleHolder = New("Frame", {
             BackgroundTransparency = 1,
             Size = UDim2.new(0, InitialLeftWidth, 1, 0),
-            Parent = TitleBackground,
+            Parent = TopBar,
         })
         New("UIListLayout", {
             FillDirection = Enum.FillDirection.Horizontal,
@@ -7065,32 +7047,13 @@ function Library:CreateWindow(WindowInfo)
             Parent = TitleHolder,
         })
 
-        --// Top Right Bar (separated background)
-        RightBackground = New("Frame", {
-            AnchorPoint = Vector2.new(1, 0.5),
-            BackgroundColor3 = "MainColor",
-            Position = UDim2.new(1, -49, 0.5, 0),
-            Size = UDim2.new(1, -InitialLeftWidth - 57 - 1, 1, -16),
-            Parent = TopBar,
-        })
-        table.insert(
-            Library.Corners,
-            New("UICorner", {
-                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                Parent = RightBackground,
-            })
-        )
-        New("UIStroke", {
-            Color = "OutlineColor",
-            Parent = RightBackground,
-        })
-
+        --// Top Right Bar
         RightWrapper = New("Frame", {
             AnchorPoint = Vector2.new(1, 0.5),
             BackgroundTransparency = 1,
             Position = UDim2.new(1, -49, 0.5, 0),
             Size = UDim2.new(1, -InitialLeftWidth - 57 - 1, 1, -16),
-            Parent = RightBackground,
+            Parent = TopBar,
         })
 
         New("UIListLayout", {
@@ -7280,17 +7243,6 @@ function Library:CreateWindow(WindowInfo)
             ScrollBarThickness = 0,
             Size = UDim2.new(0, InitialLeftWidth, 1, -70),
             Parent = MainFrame,
-        })
-        table.insert(
-            Library.Corners,
-            New("UICorner", {
-                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                Parent = Tabs,
-            })
-        )
-        New("UIStroke", {
-            Color = "OutlineColor",
-            Parent = Tabs,
         })
         New("UIListLayout", {
             Parent = Tabs,
