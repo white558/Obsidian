@@ -6889,9 +6889,8 @@ function Library:CreateWindow(WindowInfo)
 
     local IsDefaultSearchbarSize = WindowInfo.SearchbarSize == UDim2.fromScale(1, 1)
     local MainFrame
-    local Glow
-    local DividerLine
-    local TitleHolder
+        local Glow
+        local TitleHolder
     local WindowTitle
     local WindowIcon
     local RightWrapper
@@ -6958,12 +6957,7 @@ function Library:CreateWindow(WindowInfo)
             Parent = MainFrame,
         })
 
-        DividerLine = New("Frame", {
-            BackgroundColor3 = "OutlineColor",
-            Position = UDim2.fromOffset(InitialLeftWidth, 0),
-            Size = UDim2.new(0, 1, 1, -21),
-            Parent = MainFrame,
-        })
+        -- Divider line removed since blocks are now separated
 
         
         BackgroundImage = New("ImageLabel", {
@@ -7000,10 +6994,19 @@ function Library:CreateWindow(WindowInfo)
 
         --// Title
         TitleHolder = New("Frame", {
-            BackgroundTransparency = 1,
-            Size = UDim2.new(0, InitialLeftWidth, 1, 0),
+            BackgroundColor3 = "BackgroundColor",
+            Size = UDim2.new(0, InitialLeftWidth - 8, 1, -8),
+            Position = UDim2.fromOffset(4, 4),
             Parent = TopBar,
         })
+        table.insert(
+            Library.Corners,
+            New("UICorner", {
+                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                Parent = TitleHolder,
+            })
+        )
+        Library:AddOutline(TitleHolder)
         New("UIListLayout", {
             FillDirection = Enum.FillDirection.Horizontal,
             HorizontalAlignment = Enum.HorizontalAlignment.Center,
@@ -7235,14 +7238,28 @@ function Library:CreateWindow(WindowInfo)
         })
 
         --// Tabs \\--
+        local TabsOuter = New("Frame", {
+            BackgroundColor3 = "BackgroundColor",
+            Position = UDim2.fromOffset(4, 57),
+            Size = UDim2.new(0, InitialLeftWidth - 8, 1, -78),
+            Parent = MainFrame,
+        })
+        table.insert(
+            Library.Corners,
+            New("UICorner", {
+                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                Parent = TabsOuter,
+            })
+        )
+        Library:AddOutline(TabsOuter)
+        
         Tabs = New("ScrollingFrame", {
             AutomaticCanvasSize = Enum.AutomaticSize.Y,
-            BackgroundColor3 = "BackgroundColor",
+            BackgroundTransparency = 1,
             CanvasSize = UDim2.fromScale(0, 0),
-            Position = UDim2.fromOffset(0, 49),
+            Size = UDim2.new(1, 0, 1, 0),
             ScrollBarThickness = 0,
-            Size = UDim2.new(0, InitialLeftWidth, 1, -70),
-            Parent = MainFrame,
+            Parent = TabsOuter,
         })
         New("UIListLayout", {
             Parent = Tabs,
@@ -7256,15 +7273,30 @@ function Library:CreateWindow(WindowInfo)
         })
 
         --// Container \\--
-        Container = New("Frame", {
+        local ContainerOuter = New("Frame", {
             AnchorPoint = Vector2.new(1, 0),
             BackgroundColor3 = function()
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
             end,
-            Name = "Container",
-            Position = UDim2.new(1, 0, 0, 49),
-            Size = UDim2.new(1, -InitialLeftWidth - 1, 1, -70),
+            Name = "ContainerOuter",
+            Position = UDim2.new(1, -4, 0, 57),
+            Size = UDim2.new(1, -InitialLeftWidth - 5, 1, -78),
             Parent = MainFrame,
+        })
+        table.insert(
+            Library.Corners,
+            New("UICorner", {
+                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                Parent = ContainerOuter,
+            })
+        )
+        Library:AddOutline(ContainerOuter)
+        
+        Container = New("Frame", {
+            BackgroundTransparency = 1,
+            Name = "Container",
+            Size = UDim2.new(1, 0, 1, 0),
+            Parent = ContainerOuter,
         })
         New("UIPadding", {
             PaddingBottom = UDim.new(0, 0),
@@ -7376,18 +7408,16 @@ function Library:CreateWindow(WindowInfo)
     end
 
     function Window:GetSidebarWidth()
-        return Tabs.Size.X.Offset
+        return TabsOuter.Size.X.Offset + 8
     end
 
     function Window:SetSidebarWidth(Width)
         Width = math.clamp(Width, 48, MainFrame.Size.X.Offset - WindowInfo.MinContainerWidth - 1)
 
-        DividerLine.Position = UDim2.fromOffset(Width, 0)
-
-        TitleHolder.Size = UDim2.new(0, Width, 1, 0)
+        TitleHolder.Size = UDim2.new(0, Width - 8, 1, -8)
+        TabsOuter.Size = UDim2.new(0, Width - 8, 1, -78)
+        ContainerOuter.Size = UDim2.new(1, -Width - 5, 1, -78)
         RightWrapper.Size = UDim2.new(1, -Width - 57 - 1, 1, -16)
-        Tabs.Size = UDim2.new(0, Width, 1, -70)
-        Container.Size = UDim2.new(1, -Width - 1, 1, -70)
 
         if WindowInfo.EnableCompacting then
             ApplyCompact()
