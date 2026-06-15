@@ -6907,6 +6907,11 @@ function Library:CreateWindow(WindowInfo)
     local BackgroundImage
     local BottomBackground
     local FooterLabel
+    local TopBarSection
+    local TabsSection
+    local MiddleSection
+    local BottomBarSection
+    local Spacing = 8 -- Spacing between sections
 
     local InitialLeftWidth = math.ceil(WindowInfo.Size.X.Offset * 0.3)
     local IsCompact = WindowInfo.SidebarCompacted
@@ -6939,10 +6944,10 @@ function Library:CreateWindow(WindowInfo)
             MainFrame.Position = UDim2.new(0.5, -MainFrame.Size.X.Offset / 2, 0.5, -MainFrame.Size.Y.Offset / 2)
         end
 
-        local Spacing = 8 -- Spacing between sections
+        -- Spacing is declared earlier
 
         -- 1. Top Bar (Title) section
-        local TopBarSection = New("Frame", {
+        TopBarSection = New("Frame", {
             BackgroundColor3 = function()
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
             end,
@@ -7136,7 +7141,7 @@ function Library:CreateWindow(WindowInfo)
         end
 
         -- 2. Middle section (Tabs + Container)
-        local MiddleSection = New("Frame", {
+        MiddleSection = New("Frame", {
             BackgroundTransparency = 1,
             Position = UDim2.new(0, 0, 0, 48 + Spacing),
             Size = UDim2.new(1, 0, 1, -48 - 20 - Spacing * 2), -- Subtract top bar, bottom bar, and spacing
@@ -7144,7 +7149,7 @@ function Library:CreateWindow(WindowInfo)
         })
 
         -- Split middle section into Tabs (left) and Container (right)
-        local TabsSection = New("Frame", {
+        TabsSection = New("Frame", {
             BackgroundColor3 = function()
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
             end,
