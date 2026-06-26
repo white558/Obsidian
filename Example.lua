@@ -1,6 +1,6 @@
 -- idk, try to use this and figure out how the lib works ig?
 
-local repo = "https://raw.githubusercontent.com/uhfork/Obsidian/main/"
+local repo = "https://raw.githubusercontent.com/white558/Obsidian/main/"
 local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
 local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
 local SaveManager = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
