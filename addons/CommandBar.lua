@@ -2,7 +2,6 @@
 local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
 
 local CommandBar = {
     Enabled = false,
@@ -53,7 +52,7 @@ function CommandBar:Init(Library)
     SearchBox.Position = UDim2.new(0, 15, 0, 0)
     SearchBox.Size = UDim2.new(1, -30, 1, 0)
     SearchBox.Font = Enum.Font.Code
-    SearchBox.PlaceholderText = "Search for a toggle, option, or button..."
+    SearchBox.PlaceholderText = "Search toggles, options, buttons..."
     SearchBox.PlaceholderColor3 = Color3.fromRGB(150, 150, 150)
     SearchBox.Text = ""
     SearchBox.TextColor3 = Library.Scheme.FontColor
@@ -128,7 +127,6 @@ function CommandBar:Init(Library)
             if self.Modifier then
                 modifierDown = UserInputService:IsKeyDown(self.Modifier)
             end
-
             if modifierDown then
                 ToggleVisibility(not self.Enabled)
             end
@@ -138,7 +136,6 @@ function CommandBar:Init(Library)
             local pos = input.Position
             local aBox = MainFrame.AbsolutePosition
             local aSize = MainFrame.AbsoluteSize
-
             if pos.X < aBox.X or pos.X > aBox.X + aSize.X or pos.Y < aBox.Y or pos.Y > aBox.Y + aSize.Y then
                 ToggleVisibility(false)
             end
@@ -160,21 +157,27 @@ function CommandBar:Init(Library)
         query = query:lower()
         local matches = {}
 
-        -- FIX 1: guard against nil Options table
-        -- FIX 2: also search element.Name (display label) if it exists, not just the key
-        for name, element in pairs(Library.Options or {}) do
-            local displayName = (element and (element.Name or element.Text or element.Label)) or name
-            if name:lower():find(query, 1, true) or displayName:lower():find(query, 1, true) then
-                table.insert(matches, {Name = displayName, Key = name, Element = element, Type = "Option"})
+        -- Toggles: Library.Toggles[Idx] = { Text, Value, Type="Toggle", SetValue }
+        for idx, toggle in pairs(Library.Toggles or {}) do
+            local label = tostring(toggle.Text or idx)
+            if label:lower():find(query, 1, true) or tostring(idx):lower():find(query, 1, true) then
+                table.insert(matches, { Name = label, Element = toggle, Type = "Toggle" })
             end
         end
 
-        -- FIX 1: guard against nil Buttons table
-        -- FIX 2: same display-name fallback for buttons
-        for name, buttonGroup in pairs(Library.Buttons or {}) do
-            local displayName = (type(buttonGroup) == "table" and (buttonGroup.Name or buttonGroup.Text or buttonGroup.Label)) or name
-            if name:lower():find(query, 1, true) or displayName:lower():find(query, 1, true) then
-                table.insert(matches, {Name = displayName, Key = name, Element = buttonGroup, Type = "Button"})
+        -- Options: Library.Options[Idx] = Slider/Dropdown/Input/KeyPicker/ColorPicker etc.
+        for idx, option in pairs(Library.Options or {}) do
+            local label = tostring(option.Text or idx)
+            if label:lower():find(query, 1, true) or tostring(idx):lower():find(query, 1, true) then
+                table.insert(matches, { Name = label, Element = option, Type = option.Type or "Option" })
+            end
+        end
+
+        -- Buttons: Library.Buttons[Idx or number] = { Text, Func, Type="Button" }
+        for idx, button in pairs(Library.Buttons or {}) do
+            local label = tostring(button.Text or idx)
+            if label:lower():find(query, 1, true) or tostring(idx):lower():find(query, 1, true) then
+                table.insert(matches, { Name = label, Element = button, Type = "Button" })
             end
         end
 
@@ -183,12 +186,7 @@ function CommandBar:Init(Library)
         local displayed = math.min(#matches, 6)
         local totalHeight = displayed * 30
 
-        if displayed > 0 then
-            MainFrame.Size = UDim2.new(0, 400, 0, 45 + totalHeight)
-        else
-            MainFrame.Size = UDim2.new(0, 400, 0, 45)
-        end
-
+        MainFrame.Size = UDim2.new(0, 400, 0, 45 + totalHeight)
         ResultsFrame.CanvasSize = UDim2.new(0, 0, 0, #matches * 30)
 
         for i, match in ipairs(matches) do
@@ -215,15 +213,24 @@ function CommandBar:Init(Library)
             end)
 
             Btn.MouseButton1Click:Connect(function()
-                if match.Type == "Option" then
-                    if typeof(match.Element.Value) == "boolean" then
-                        match.Element:SetValue(not match.Element.Value)
-                    end
+                local el = match.Element
+
+                if match.Type == "Toggle" then
+                    -- Toggles use :SetValue(bool)
+                    el:SetValue(not el.Value)
+
                 elseif match.Type == "Button" then
-                    if type(match.Element) == "function" then
-                        match.Element()
-                    elseif type(match.Element) == "table" and match.Element.Callback then
-                        match.Element.Callback()
+                    -- Buttons store their callback in .Func
+                    if type(el.Func) == "function" then
+                        el.Func()
+                    elseif type(el.Callback) == "function" then
+                        el.Callback()
+                    end
+
+                else
+                    -- Options (Slider, Dropdown, etc.) — just focus/open if possible
+                    if type(el.SetValue) == "function" and typeof(el.Value) == "boolean" then
+                        el:SetValue(not el.Value)
                     end
                 end
 
