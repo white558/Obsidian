@@ -3405,11 +3405,13 @@ do
         local Text
         local MarginTop = 0
         local MarginBottom = 0
+        local Visible = true
 
         if typeof(Params) == "table" then
             Text = Params.Text
             MarginTop = Params.MarginTop or Params.Margin or 0
             MarginBottom = Params.MarginBottom or Params.Margin or 0
+            Visible = Params.Visible or true
         elseif typeof(Params) == "string" then
             Text = Params
         end
@@ -3482,13 +3484,22 @@ do
 
         Groupbox:Resize()
 
+        Holder.Visible = Visible
+
         local Divider = {
             Holder = Holder,
             Text = Text,
             MarginTop = MarginTop,
             MarginBottom = MarginBottom,
             Type = "Divider",
+            Visible = Visible,
         }
+
+        function Divider:SetVisible(Visible: boolean)
+            Divider.Visible = Visible
+            Holder.Visible = Divider.Visible
+            Groupbox:Resize()
+        end
 
         table.insert(Groupbox.Elements, Divider)
         return Divider
