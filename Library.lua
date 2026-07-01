@@ -193,6 +193,7 @@ local Library = {
     KeybindToggles = {},
 
     Notifications = {},
+    NotificationGlows = {},
     Dialogues = {},
     ActiveLoading = nil,
     ActiveDialog = nil,
@@ -6580,6 +6581,20 @@ function Library:Notify(...)
     })
     Library:AddOutline(Holder)
 
+    local NotifGlow = New("ImageLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(-20, -20),
+        Size = UDim2.new(1, 40, 1, 40),
+        ZIndex = -1,
+        Visible = Library.Scheme.WindowGlow,
+        Image = CustomImageManager.GetAsset("Glow"),
+        ImageColor3 = function()
+            return Library:GetBetterColor(Library.Scheme.AccentColor, -1)
+        end,
+        Parent = Holder,
+    })
+    table.insert(Library.NotificationGlows, NotifGlow)
+
     local ContentContainer = New("Frame", {
         BackgroundTransparency = 1,
         AutomaticSize = Enum.AutomaticSize.XY,
@@ -6846,6 +6861,16 @@ function Library:SetGlow(State: boolean)
 
     self.Scheme.WindowGlow = State
     self.Window.Glow.Visible = State
+
+    for i = #Library.NotificationGlows, 1, -1 do
+        local Glow = Library.NotificationGlows[i]
+        if not Glow or not Glow.Parent then
+            table.remove(Library.NotificationGlows, i)
+        else
+            Glow.Visible = State
+        end
+    end
+
     self:UpdateColorsUsingRegistry()
 end
 
