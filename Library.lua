@@ -6581,18 +6581,36 @@ function Library:Notify(...)
     })
     Library:AddOutline(Holder)
 
+    -- Glow must be a sibling of Holder (child of FakeBackground, not Holder)
+    -- because Holder has AutomaticSize=Y + UIListLayout; a child with Y Scale=1
+    -- would create a circular dependency and expand the notification to full screen.
+    -- We start with Size(0,0) and drive it via AbsoluteSize/AbsolutePosition signals.
     local NotifGlow = New("ImageLabel", {
         BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(-20, -20),
-        Size = UDim2.new(1, 40, 1, 40),
-        ZIndex = -1,
+        Size = UDim2.fromOffset(0, 0),
+        ZIndex = 4, -- below Holder (ZIndex=5), above background
         Visible = Library.Scheme.WindowGlow,
         Image = CustomImageManager.GetAsset("Glow"),
         ImageColor3 = function()
             return Library:GetBetterColor(Library.Scheme.AccentColor, -1)
         end,
-        Parent = Holder,
+        Parent = FakeBackground,
     })
+    local function UpdateNotifGlowTransform()
+        if not Holder.Parent then return end
+        local fakeAbsPos = FakeBackground.AbsolutePosition
+        local holderAbsPos = Holder.AbsolutePosition
+        local holderAbsSize = Holder.AbsoluteSize
+        -- Position relative to FakeBackground, extending 20px on each side
+        NotifGlow.Position = UDim2.fromOffset(
+            holderAbsPos.X - fakeAbsPos.X - 20,
+            holderAbsPos.Y - fakeAbsPos.Y - 20
+        )
+        NotifGlow.Size = UDim2.fromOffset(holderAbsSize.X + 40, holderAbsSize.Y + 40)
+    end
+    Holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateNotifGlowTransform)
+    Holder:GetPropertyChangedSignal("AbsolutePosition"):Connect(UpdateNotifGlowTransform)
+    task.defer(UpdateNotifGlowTransform)
     table.insert(Library.NotificationGlows, NotifGlow)
 
     local ContentContainer = New("Frame", {
