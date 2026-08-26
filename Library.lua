@@ -2357,6 +2357,7 @@ local ResizeIcon = Library:GetIcon("move-diagonal-2")
 local KeyIcon = Library:GetIcon("key")
 local MoveIcon = Library:GetIcon("move")
 local FileQuestionMarkIcon = Library:GetIcon("file-question-mark")
+local PopOutIcon = Library:GetIcon("square-arrow-down-left")
 
 function Library:SetIconModule(module: IconModule)
     FetchIcons = true
@@ -2369,6 +2370,7 @@ function Library:SetIconModule(module: IconModule)
     KeyIcon = Library:GetIcon("key")
     MoveIcon = Library:GetIcon("move")
     FileQuestionMarkIcon = Library:GetIcon("file-question-mark")
+    PopOutIcon = Library:GetIcon("square-arrow-down-left")
 end
 
 local BaseAddons = {}
@@ -3625,6 +3627,25 @@ function Library:MakeBoxPopOut(Box: any, Options: any)
         PlaceholderHeader = Header:Clone()
         PlaceholderHeader.Parent = Frame
         DimPopOutClone(PlaceholderHeader)
+
+        if PopOutIcon then
+            local PlaceholderDockIcon = New("ImageButton", {
+                AutoButtonColor = false,
+                AnchorPoint = Vector2.new(1, 0.5),
+                BackgroundTransparency = 1,
+                ImageColor3 = "WhiteColor",
+                Position = UDim2.new(1, -8, 0.5, 0),
+                Size = UDim2.fromOffset(22, 22),
+                ZIndex = PlaceholderHeader.ZIndex + 1,
+                Parent = Frame,
+            })
+            PlaceholderDockIcon.Image = PopOutIcon.Url
+            PlaceholderDockIcon.ImageRectOffset = PopOutIcon.ImageRectOffset
+            PlaceholderDockIcon.ImageRectSize = PopOutIcon.ImageRectSize
+            PlaceholderDockIcon.MouseButton1Click:Connect(function()
+                Box:SetPoppedOut(false)
+            end)
+        end
 
         return Frame
     end
