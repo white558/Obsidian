@@ -1298,6 +1298,26 @@ local ModalElement = New("TextButton", {
     Parent = ScreenGui,
 })
 
+--// Floats and Overlays
+local Floats = New("Frame", {
+    BackgroundTransparency = 1,
+    Size = UDim2.fromScale(1, 1),
+    ZIndex = 10,
+    Active = false,
+    Parent = ScreenGui,
+})
+
+local Overlay = New("Frame", {
+    BackgroundTransparency = 1,
+    Size = UDim2.fromScale(1, 1),
+    ZIndex = 20,
+    Active = false,
+    Parent = ScreenGui,
+})
+
+Library.Floats = Floats
+Library.Overlay = Overlay
+
 --// Cursor
 local Cursor, CursorCustomImage
 do
@@ -3526,19 +3546,19 @@ do
 end
 
 function Library:MakeBoxPopOut(Box: any, Options: any)
-    local Enabled = Options and Options.Enabled ~= false
-    local Header = Options and Options.Header
-    local Children = Options and Options.Children
-    local Before = Options and Options.Before
-    local After = Options and Options.After
+    Options = Options or {}
+    local Header = Options.Header
+    local GetBoxChildren = Options.Children
+    local Before = Options.Before
+    local After = Options.After
 
     Box.PoppedOut = false
-    Box.PopOutEnabled = Enabled
+    Box.PopOutEnabled = Options.Enabled ~= false
     Box.PopOutFloat = nil
     Box.PopOutPlaceholder = nil
 
-    if not Box.PopOutEnabled then
-        function Box:SetPoppedOut(_Value: boolean, _SetPoppedOut: any) end
+    if not Box.PopOutEnabled or not Header then
+        function Box:SetPoppedOut(_Value: boolean) end
         function Box:TogglePoppedOut() end
         function Box:RefreshPopOutPlaceholder() end
         return
@@ -3552,18 +3572,19 @@ function Library:MakeBoxPopOut(Box: any, Options: any)
     local Float
     local FloatScale
 
-    local HandledChildren: { any } = {}
-    local OriginalParents: { [any]: any } = {}
-    local OriginalLayoutOrders: { [any]: number } = {}
+    local HandledChildren: { GuiObject } = {}
+    local OriginalParents: { [GuiObject]: Instance? } = {}
+    local OriginalLayoutOrders: { [GuiObject]: number } = {}
 
-    local DragState: string = "Idle"
-    local DragInput: any
-    local PressMouse: any
+    local DragState: "Idle" | "Holding" | "Dragging" = "Idle"
+    local DragInput: InputObject?
+    local PressMouse: Vector2?
 
-    local DragStartPos: any
-    local DragChanged: any
+    local DragStartPos: UDim2?
+    local DragChanged: RBXScriptConnection?
     local DragDidMove = false
 
+    --// UI Handler
     local function RaiseFloat()
         if not Float or not Library.Floats then
             return
@@ -3580,6 +3601,7 @@ function Library:MakeBoxPopOut(Box: any, Options: any)
         if Float.Parent == Library.Floats then
             Float.Parent = Library.Overlay
         end
+        Float.Parent = Library.Floats
     end
 
     local function CreatePlaceholder()
@@ -3600,28 +3622,9 @@ function Library:MakeBoxPopOut(Box: any, Options: any)
         )
         Library:AddOutline(Frame)
 
-        if Header then
-            PlaceholderHeader = Header:Clone()
-            PlaceholderHeader.Parent = Frame
-            Library.DimPopOutClone(PlaceholderHeader)
-        end
-
-        if Library.PopOutIcon then
-            local PlaceholderDockIcon = New("ImageButton", {
-                AutoButtonColor = false,
-                AnchorPoint = Vector2.new(1, 0.5),
-                BackgroundTransparency = 1,
-                ImageColor3 = "WhiteColor",
-                Position = UDim2.new(1, -8, 0.5, 0),
-                Size = UDim2.fromOffset(22, 22),
-                ZIndex = PlaceholderHeader.ZIndex + 1,
-                Parent = Frame,
-            })
-            Library:ApplyLucideIcon(PlaceholderDockIcon, Library.PopOutIcon)
-            PlaceholderDockIcon.MouseButton1Click:Connect(function()
-                Box:SetPoppedOut(false)
-            end)
-        end
+        PlaceholderHeader = Header:Clone()
+        PlaceholderHeader.Parent = Frame
+        DimPopOutClone(PlaceholderHeader)
 
         return Frame
     end
@@ -3638,10 +3641,10 @@ function Library:MakeBoxPopOut(Box: any, Options: any)
 
         PlaceholderHeader = Header:Clone()
         PlaceholderHeader.Parent = Placeholder
-        Library.DimPopOutClone(PlaceholderHeader)
+        DimPopOutClone(PlaceholderHeader)
     end
 
-    function Box:SetPoppedOut(Value: boolean, FloatPosition: any)
+    function Box:SetPoppedOut(Value: boolean, FloatPosition: UDim2?)
         if not Box.PopOutEnabled or Box.Destroyed then
             return
         end
@@ -3659,123 +3662,278 @@ function Library:MakeBoxPopOut(Box: any, Options: any)
                 Before()
             end
 
-            local BoxChildren = if Children then Children() else { Holder }
+            local BoxChildren = if GetBoxChildren then GetBoxChildren() else { Holder }
+            table.clear(HandledChildren)
+            table.clear(OriginalParents)
+            table.clear(OriginalLayoutOrders)
 
             for _, Child in BoxChildren do
                 if not Child or not Child.Parent then
                     continue
                 end
 
-                OriginalParents[Child] = Child.Parent
-                Child.Parent = Library.Floats
                 table.insert(HandledChildren, Child)
-
-                if OriginalLayoutOrders[Child] == nil then
-                    OriginalLayoutOrders[Child] = Child.LayoutOrder
-                end
-                Child.LayoutOrder = 9999
+                OriginalParents[Child] = Child.Parent
+                OriginalLayoutOrders[Child] = Child.LayoutOrder
             end
+
+            if #HandledChildren == 0 then
+                return
+            end
+
+            local Width = Holder.AbsoluteSize.X / Library.DPIScale
+            if Width < 50 then
+                Width = 200
+            end
+
+            local AbsolutePosition = Holder.AbsolutePosition
+            Placeholder = CreatePlaceholder()
+            Box.PopOutPlaceholder = Placeholder
 
             Float = New("Frame", {
+                Active = true,
+                AutomaticSize = Enum.AutomaticSize.Y,
                 BackgroundTransparency = 1,
-                Size = UDim2.fromOffset(Library.Window.Size.X.Offset, Library.Window.Size.Y.Offset),
-                Position = BoxHolder.Position,
-                Visible = true,
-                ZIndex = 100,
+                Position = FloatPosition or UDim2.fromOffset(
+                    AbsolutePosition.X / Library.DPIScale,
+                    AbsolutePosition.Y / Library.DPIScale
+                ),
+                Size = UDim2.fromOffset(Width, 0),
+                ZIndex = 1,
                 Parent = Library.Floats,
             })
-
-            Library:AddOutline(Float)
-            table.insert(Library.Corners, New("UICorner", {
-                CornerRadius = UDim.new(0, Library.CornerRadius),
+            FloatScale = New("UIScale", {
                 Parent = Float,
-            }))
+            })
+            table.insert(Library.Scales, FloatScale)
+            FloatScale.Scale = Library.DPIScale
 
+            New("UIListLayout", {
+                Padding = UDim.new(0, 6),
+                Parent = Float,
+            })
+
+            for _, Child in HandledChildren do
+                Child.Parent = Float
+            end
+
+            if not table.find(Library.DraggableElements, Float) then
+                table.insert(Library.DraggableElements, Float)
+            end
+
+            Box.PopOutFloat = Float
+            Box.PoppedOut = true
+            SyncPopOutVisibility(Box)
             RaiseFloat()
 
-            if Library.PopOutFloat and Library.PopOutFloat.Parent then
-                Library.PopOutFloat.Visible = false
-            end
-
-            Box.PoppedOut = true
-        else
-            local function RestoreChildren()
-                for _, Child in HandledChildren do
-                    if Child and Child.Parent then
-                        Child.Parent = OriginalParents[Child]
-                        Child.LayoutOrder = OriginalLayoutOrders[Child] or Child.LayoutOrder
-                    end
+            Float:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
+                if Box.Resize then
+                    Box:Resize()
                 end
+            end)
 
-                HandledChildren = {}
-                OriginalParents = {}
-                OriginalLayoutOrders = {}
+            if After then
+                After()
             end
 
-            RestoreChildren()
+            return
+        end
 
-            if Float and Float.Parent then
-                Float:Destroy()
-                Float = nil
+        if Float then
+            local DraggableIndex = table.find(Library.DraggableElements, Float)
+            if DraggableIndex then
+                table.remove(Library.DraggableElements, DraggableIndex)
+            end
+        end
+
+        if FloatScale then
+            local ScaleIndex = table.find(Library.Scales, FloatScale)
+            if ScaleIndex then
+                table.remove(Library.Scales, ScaleIndex)
             end
 
-            if Library.PopOutFloat and Library.PopOutFloat.Parent then
-                Library.PopOutFloat.Visible = true
+            FloatScale = nil
+        end
+
+        for _, Child in HandledChildren do
+            if not Child or not Child.Parent then
+                continue
             end
 
-            Box.PoppedOut = false
+            Child.Parent = OriginalParents[Child] or BoxHolder
+            Child.LayoutOrder = OriginalLayoutOrders[Child] or 0
+        end
+
+        if Placeholder then
+            Placeholder:Destroy()
+            Placeholder = nil
+        end
+
+        PlaceholderHeader = nil
+
+        if Float then
+            Float:Destroy()
+            Float = nil
+        end
+
+        Box.PopOutFloat = nil
+        Box.PopOutPlaceholder = nil
+        Box.PoppedOut = false
+        table.clear(HandledChildren)
+        table.clear(OriginalParents)
+        table.clear(OriginalLayoutOrders)
+
+        if After then
+            After()
         end
     end
 
     function Box:TogglePoppedOut()
-        if Box.PopOutEnabled then
-            Box:SetPoppedOut(not Box.PoppedOut)
-        end
+        Box:SetPoppedOut(not Box.PoppedOut)
     end
 
-    Box.PopOutFunction = function(Input: any)
-        if not Box.PopOutEnabled then
+    --// Drag Handler
+    local function StopDrag()
+        if DragState == "Idle" then
             return
         end
 
-        if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-            PressMouse = Input.Position
-            DragState = "Holding"
+        local WasDragging = DragState == "Dragging"
+        local DidMove = DragDidMove
+        DragState = "Idle"
+        DragInput = nil
+        PressMouse = nil
+        DragStartPos = nil
+        DragDidMove = false
+
+        if DragChanged and DragChanged.Connected then
+            DragChanged:Disconnect()
+            DragChanged = nil
         end
-    end
 
-    Box.MouseButton1Click:Connect(Box.PopOutFunction)
-
-    Library:GiveSignal(UserInputService.InputChanged:Connect(function(Input: any)
-        if not Box.PopOutEnabled then
+        if not WasDragging or not Box.PoppedOut or not Float then
             return
         end
 
-        if DragState == "Holding" and Input.UserInputType == Enum.UserInputType.MouseMovement then
-            local Delta = Input.Position - (PressMouse or Input.Position)
-            if Delta.Magnitude > (Library.PopOutDragThreshold or 8) then
-                DragState = "Dragging"
-                DragDidMove = true
-            end
+        local FloatCenter = Float.AbsolutePosition + (Float.AbsoluteSize * 0.5)
+        local NearPlaceholder = false
+        if Library.Toggled and Placeholder and Placeholder.Parent then
+            local PlaceholderCenter = Placeholder.AbsolutePosition + (Placeholder.AbsoluteSize * 0.5)
+            NearPlaceholder = (FloatCenter - PlaceholderCenter).Magnitude <= Library.PopOutSnapDistance
         end
 
-        if DragState == "Dragging" then
-            if Library.PopOutHoldTime and Library.PopOutHoldTime > 0 then
-                task.wait(Library.PopOutHoldTime)
+        if NearPlaceholder or (DidMove and not IsScreenPointOutsideMain(FloatCenter)) then
+            Box:SetPoppedOut(false)
+        end
+    end
+
+    local function BeginDrag(Input: InputObject)
+        if DragState ~= "Idle" or Box.Destroyed or not (ScreenGui and ScreenGui.Parent) then
+            return
+        end
+
+        local Point = Vector2.new(Input.Position.X, Input.Position.Y)
+        local Top = GetTopFloatAt(Point)
+        if Box.PoppedOut then
+            if not Float or Top ~= Float then
+                return
+            end
+        elseif Top ~= nil and not Header:IsDescendantOf(Top) then
+            return
+        end
+
+        DragState = "Holding"
+        DragInput = Input
+        PressMouse = Vector2.new(Input.Position.X, Input.Position.Y)
+        DragStartPos = nil
+        DragDidMove = false
+
+        if Box.PoppedOut and Float then
+            RaiseFloat()
+        end
+
+        DragChanged = Input.Changed:Connect(function()
+            if Input.UserInputState == Enum.UserInputState.End then
+                StopDrag()
+            end
+        end)
+
+        task.delay(Library.PopOutHoldTime, function()
+            if DragState ~= "Holding" or DragInput ~= Input then
+                return
             end
 
-            if DragDidMove then
-                Box:SetPoppedOut(true)
-                DragState = "Idle"
-                DragDidMove = false
+            DragState = "Dragging"
+            if Box.PoppedOut and Float then
+                RaiseFloat()
+                DragStartPos = Float.Position
             end
+        end)
+    end
+
+    local function UpdateDrag(Input: InputObject)
+        if DragState ~= "Dragging" or not PressMouse then
+            return
+        end
+        if not (ScreenGui and ScreenGui.Parent) then
+            StopDrag()
+            return
+        end
+
+        local MousePosition = Vector2.new(Input.Position.X, Input.Position.Y)
+        local Delta = MousePosition - PressMouse
+
+        if not Box.PoppedOut then
+            if Delta.Magnitude < Library.PopOutDragThreshold then
+                return
+            end
+
+            Box:SetPoppedOut(true)
+            if not Float then
+                return
+            end
+
+            RaiseFloat()
+            DragStartPos = Float.Position
+            DragDidMove = true
+        elseif Delta.Magnitude >= Library.PopOutDragThreshold then
+            DragDidMove = true
+        end
+
+        if Float and DragStartPos then
+            Float.Position = UDim2.new(
+                DragStartPos.X.Scale,
+                DragStartPos.X.Offset + Delta.X,
+                DragStartPos.Y.Scale,
+                DragStartPos.Y.Offset + Delta.Y
+            )
+        end
+    end
+
+    local function BindDragSource(Gui: GuiObject)
+        Library:GiveSignal(Gui.InputBegan:Connect(function(Input: InputObject)
+            if IsClickInput(Input) then
+                BeginDrag(Input)
+            end
+        end))
+    end
+
+    BindDragSource(Header)
+    for _, Descendant in Header:GetDescendants() do
+        if Descendant:IsA("GuiObject") and not Descendant:IsA("ImageButton") then
+            BindDragSource(Descendant)
+        end
+    end
+
+    Library:GiveSignal(Header.DescendantAdded:Connect(function(Descendant)
+        if Descendant:IsA("GuiObject") and not Descendant:IsA("ImageButton") then
+            BindDragSource(Descendant)
         end
     end))
 
-    Library:GiveSignal(Box.Holder.MouseButton1Up:Connect(function()
-        if DragState == "Holding" then
-            Box:SetPoppedOut(false)
-            DragState = "Idle"
+    Library:GiveSignal(UserInputService.InputChanged:Connect(function(Input: InputObject)
+        if IsHoverInput(Input) then
+            UpdateDrag(Input)
         end
     end))
 end
@@ -7769,6 +7927,7 @@ function Library:CreateWindow(WindowInfo)
     local Window = {
         BackgroundImage = BackgroundImage,
         Glow = Glow,
+        MainFrame = MainFrame,
     }
 
     function Window:ChangeTitle(title)
@@ -8442,6 +8601,29 @@ function Library:CreateWindow(WindowInfo)
                 Groupbox:Toggle()
             end)
 
+            Library:MakeBoxPopOut(Groupbox, {
+                Enabled = Info.PopOut ~= false,
+
+                Header = GroupboxLabel,
+                Children = function()
+                    local Children = {}
+                    for _, Child in BoxHolder:GetChildren() do
+                        if Child:IsA("GuiObject") and Child ~= Groupbox.PopOutPlaceholder then
+                            table.insert(Children, Child)
+                        end
+                    end
+                    return Children
+                end,
+
+                Before = function()
+                    ToggleButton.Visible = false
+                end,
+                After = function()
+                    ToggleButton.Visible = true
+                    Groupbox:Resize()
+                end
+            })
+
             setmetatable(Groupbox, BaseGroupbox)
 
             Groupbox:Resize()
@@ -8734,6 +8916,21 @@ function Library:CreateWindow(WindowInfo)
             else
                 table.insert(Tab.Tabboxes, Tabbox)
             end
+
+            Library:MakeBoxPopOut(Tabbox, {
+                Enabled = Info.PopOut ~= false,
+
+                Header = TabboxButtons,
+                Children = function()
+                    return { TabboxHolder }
+                end,
+
+                After = function()
+                    if Tabbox.ActiveTab then
+                        Tabbox.ActiveTab:Resize()
+                    end
+                end
+            })
 
             return Tabbox
         end
@@ -10492,10 +10689,6 @@ function Library:CreateWindow(WindowInfo)
 
         MainFrame.Visible = Library.Toggled
 
-        if Library.PopOut and Library.PopOutFloat then
-            Library.PopOutFloat.Visible = Library.Toggled
-        end
-
         if WindowInfo.UnlockMouseWhileOpen then
             ModalElement.Modal = Library.Toggled
         end
@@ -10749,38 +10942,6 @@ function Library:CreateLoading(LoadingInfo)
     })
     Library:AddOutline(MainFrame)
     table.insert(Library.Corners, New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius), Parent = MainFrame }))
-
-    --// Pop Out Float \\--
-    if Library.PopOut then
-        local PopOutFloat = New("Frame", {
-            Name = "PopOutFloat",
-            BackgroundTransparency = 1,
-            Size = UDim2.fromOffset(Library.Window.Size.X.Offset, Library.Window.Size.Y.Offset),
-            Position = MainFrame.Position,
-            Visible = false,
-            Parent = ScreenGui,
-        })
-        Library.PopOutFloat = PopOutFloat
-        table.insert(Library.DraggableElements, MainFrame)
-        table.insert(Library.DraggableElements, PopOutFloat)
-    end
-
-    --// Apply PopOut to all existing Groupboxes and Tabboxes \\--
-    for _, Tab in Library.Tabs do
-        if not Tab then
-            continue
-        end
-        for _, Groupbox in Tab.Groupboxes do
-            if Groupbox.PopOutEnabled == nil then
-                Library:MakeBoxPopOut(Groupbox, { Enabled = true, Header = Groupbox.TextLabel })
-            end
-        end
-        for _, Tabbox in Tab.Tabboxes do
-            if Tabbox.PopOutEnabled == nil then
-                Library:MakeBoxPopOut(Tabbox, { Enabled = true })
-            end
-        end
-    end
 
     local MainScale = New("UIScale", { Parent = MainFrame })
     table.insert(Library.Scales, MainScale)
