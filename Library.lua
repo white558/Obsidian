@@ -1826,25 +1826,74 @@ local BackgroundAssetCache = {}
 local BackgroundAssetPending = {}
 
 local function safeGetCustomAsset(path)
-    if getcustomasset then
-        local Success, Result = pcall(getcustomasset, path)
-        if Success then return Result end
-    elseif getsynasset then
-        local Success, Result = pcall(getsynasset, path)
-        if Success then return Result end
-    elseif syn and syn.get_custom_asset then
-        local Success, Result = pcall(syn.get_custom_asset, path)
-        if Success then return Result end
+    local getter = getcustomasset or getsynasset
+    if getter then
+        local Success, Result = pcall(getter, path)
+        if Success and type(Result) == "string" and Result ~= "" then
+            return Result
+        end
     end
+
+    if syn and typeof(syn.get_custom_asset) == "function" then
+        local Success, Result = pcall(syn.get_custom_asset, path)
+        if Success and type(Result) == "string" and Result ~= "" then
+            return Result
+        end
+    end
+
     return nil
 end
 
 local function safeMakeFolder(path)
-    if isfolder and not isfolder(path) then
-        pcall(makefolder, path)
-    elseif makefolder then
+    if typeof(isfolder) == "function" and isfolder(path) then
+        return
+    end
+    if typeof(makefolder) == "function" then
         pcall(makefolder, path)
     end
+end
+
+local function encodeNonAsciiUrl(Url)
+    return (Url:gsub("[\\128-\\255]", function(Byte)
+        return string.format("%%%02X", string.byte(Byte))
+    end))
+end
+
+local function safeHttpGet(Url)
+    local EncodedUrl = encodeNonAsciiUrl(Url)
+
+    local Request = request or http_request
+    if not Request and syn and typeof(syn.request) == "function" then
+        Request = syn.request
+    end
+
+    if typeof(Request) == "function" then
+        for _, RequestUrl in { EncodedUrl, Url } do
+            local Ok, Response = pcall(Request, {
+                Url = RequestUrl,
+                Method = "GET",
+            })
+
+            if Ok and type(Response) == "table" then
+                local Status = tonumber(Response.StatusCode)
+                local Body = Response.Body
+                if type(Body) == "string" and Body ~= "" and (not Status or (Status >= 200 and Status < 400)) then
+                    return Body
+                end
+            end
+        end
+    end
+
+    if game and typeof(game.HttpGet) == "function" then
+        for _, RequestUrl in { EncodedUrl, Url } do
+            local Ok, Body = pcall(game.HttpGet, game, RequestUrl)
+            if Ok and type(Body) == "string" and Body ~= "" then
+                return Body
+            end
+        end
+    end
+
+    return nil
 end
 
 local function getBackgroundAsset(Value)
@@ -1861,7 +1910,6 @@ local function getBackgroundAsset(Value)
         return nil
     end
 
-    -- Roblox asset/content strings can be assigned directly.
     if Value:match("^rbxassetid://")
         or Value:match("^rbxasset://")
         or Value:match("^content://")
@@ -1869,18 +1917,14 @@ local function getBackgroundAsset(Value)
         return Value
     end
 
-    -- A bare numeric string is also a valid asset id.
     if tonumber(Value) then
         return "rbxassetid://" .. Value
     end
 
-    -- Web images are downloaded asynchronously by requestBackgroundAsset.
     if Value:match("^https?://") then
         return BackgroundAssetCache[Value]
     end
 
-    -- Do not manufacture "rbxassetid://https://..." which can make
-    -- ImageLabel assignment fail in some Roblox/executor environments.
     return nil
 end
 
@@ -1893,26 +1937,42 @@ local function requestBackgroundAsset(Value)
     end
 
     BackgroundAssetPending[Value] = true
+
     task.spawn(function()
-        local AssetId
         local Success, Result = pcall(function()
             safeMakeFolder("Obsidian")
             safeMakeFolder("Obsidian/custom_assets")
 
-            local Name = Value:gsub("[^%w%._-]", "_")
-            if #Name > 180 then
-                Name = Name:sub(-180)
+            -- Keep a real image extension. Fandom/Wikia URLs commonly contain
+            -- ".png/revision/..." rather than ending in ".png".
+            local Extension = Value:match("%.([%w]+)[/%?&]") or "png"
+            Extension = Extension:lower()
+            if #Extension > 5 then
+                Extension = "png"
             end
-            local FilePath = "Obsidian/custom_assets/bg_" .. Name
 
-            if not isfile or not isfile(FilePath) then
-                if not writefile then
+            local Name = Value:gsub("^https?://", "")
+            Name = Name:gsub("[^%w%._-]", "_")
+            if #Name > 150 then
+                Name = Name:sub(1, 150)
+            end
+
+            local FilePath = string.format(
+                "Obsidian/custom_assets/bg_%s.%s",
+                Name,
+                Extension
+            )
+
+            if typeof(isfile) ~= "function" or not isfile(FilePath) then
+                if typeof(writefile) ~= "function" then
                     return nil
                 end
-                local Ok, Data = pcall(game.HttpGet, game, Value)
-                if not Ok or type(Data) ~= "string" or Data == "" then
+
+                local Data = safeHttpGet(Value)
+                if not Data then
                     return nil
                 end
+
                 local Written = pcall(writefile, FilePath, Data)
                 if not Written then
                     return nil
@@ -1922,15 +1982,14 @@ local function requestBackgroundAsset(Value)
             return safeGetCustomAsset(FilePath)
         end)
 
-        if Success and Result and Result ~= "" then
-            AssetId = Result
-            BackgroundAssetCache[Value] = AssetId
+        if Success and type(Result) == "string" and Result ~= "" then
+            BackgroundAssetCache[Value] = Result
         end
 
         BackgroundAssetPending[Value] = nil
 
         if Library.Scheme.BackgroundImage == Value then
-            Library:RefreshBackgroundTargets()
+            pcall(Library.RefreshBackgroundTargets, Library)
         end
     end)
 end
@@ -1950,25 +2009,33 @@ local function applyBackgroundTarget(Target, Asset)
         return
     end
 
-    local Background = New("ImageLabel", {
-        Name = "CustomBackground",
-        Active = false,
-        BackgroundTransparency = 1,
-        Image = Asset,
-        ImageTransparency = 0.8,
-        Position = UDim2.fromScale(0, 0),
-        ScaleType = Enum.ScaleType.Stretch,
-        Size = UDim2.fromScale(1, 1),
-        ZIndex = math.max(0, Target.ZIndex - 1),
-        Parent = Target,
-    })
-
-    local Corner = Target:FindFirstChildOfClass("UICorner")
-    if Corner then
-        New("UICorner", {
-            CornerRadius = Corner.CornerRadius,
-            Parent = Background,
+    -- The actual Image assignment is protected as well. This matters for
+    -- executors that return a bad custom-asset URI even after getcustomasset.
+    local Success = pcall(function()
+        local Background = New("ImageLabel", {
+            Name = "CustomBackground",
+            Active = false,
+            BackgroundTransparency = 1,
+            Image = Asset,
+            ImageTransparency = 0.8,
+            Position = UDim2.fromScale(0, 0),
+            ScaleType = Enum.ScaleType.Stretch,
+            Size = UDim2.fromScale(1, 1),
+            ZIndex = math.max(0, Target.ZIndex - 1),
+            Parent = Target,
         })
+
+        local Corner = Target:FindFirstChildOfClass("UICorner")
+        if Corner then
+            New("UICorner", {
+                CornerRadius = Corner.CornerRadius,
+                Parent = Background,
+            })
+        end
+    end)
+
+    if not Success then
+        return
     end
 end
 
@@ -1980,8 +2047,9 @@ function Library:RegisterBackgroundTarget(Target)
     BackgroundTargets[Target] = true
     local Value = Library.Scheme.BackgroundImage
     local Asset = getBackgroundAsset(Value)
+
     if Asset then
-        applyBackgroundTarget(Target, Asset)
+        pcall(applyBackgroundTarget, Target, Asset)
     elseif typeof(Value) == "string" and Value:match("^https?://") then
         requestBackgroundAsset(Value)
     end
@@ -14442,7 +14510,6 @@ end
 Library.Popup = Library.ShowPopup
 Library.AddPopup = Library.CreatePopup
 
---// Notification History \\--
 function Library:AddNotificationToHistory(Entry)
     if typeof(Entry) ~= "table" then
         return
@@ -14458,40 +14525,12 @@ function Library:AddNotificationToHistory(Entry)
         table.remove(Library.NotificationHistory)
     end
 
-    if not Library.NotificationHistoryOpen then
+    if Library.NotificationHistoryOpen then
+        Library:RefreshNotificationHistory()
+    else
         Library.NotificationUnreadCount = (Library.NotificationUnreadCount or 0) + 1
         Library:UpdateNotificationBadge()
-        return
     end
-
-    local Search = Library.NotificationHistorySearch or ""
-    local RenderLimit = tonumber(Library.NotificationHistoryRenderLimit) or 30
-    local Scroller = Library.NotificationHistoryContainer
-
-    if Search == "" and Scroller then
-        local VisibleCards = 0
-        for _, Child in Scroller:GetChildren() do
-            if Child:IsA("TextButton") then
-                VisibleCards += 1
-            end
-        end
-
-        if VisibleCards < RenderLimit then
-            for _, Child in Scroller:GetChildren() do
-                if Child:IsA("TextButton") then
-                    Child.LayoutOrder = (Child.LayoutOrder or 1) + 1
-                elseif Child:IsA("TextLabel") then
-                    Child:Destroy()
-                end
-            end
-
-            local NewCard = Library:_CreateNotificationHistoryCard(Entry)
-            NewCard.LayoutOrder = 0
-            return
-        end
-    end
-
-    Library:RefreshNotificationHistory()
 end
 
 function Library:UpdateNotificationBadge()
@@ -14513,9 +14552,6 @@ end
 
 function Library:ClearNotificationHistory()
     table.clear(Library.NotificationHistory)
-    Library.NotificationUnreadCount = 0
-    Library:UpdateNotificationBadge()
-
     if Library.NotificationHistoryFrame and Library.NotificationHistoryFrame.Visible then
         Library:RefreshNotificationHistory()
     end
@@ -14585,11 +14621,9 @@ function Library:_BuildNotificationHistory()
         Size = UDim2.fromOffset(NOTIFY_HISTORY_SIZE.X, NOTIFY_HISTORY_SIZE.Y),
         GroupTransparency = 1,
         Visible = false,
-        ZIndex = 10000,
+        ZIndex = 10,
         Parent = ScreenGui,
     })
-
-    Library.NotificationHistoryFrame = Holder
     table.insert(
         Library.Corners,
         New("UICorner", {
@@ -14604,7 +14638,6 @@ function Library:_BuildNotificationHistory()
         })
     )
     Library:AddOutline(Holder)
-
     Library:RegisterBackgroundTarget(Holder)
 
     local TitleLabel = New("TextLabel", {
@@ -14625,61 +14658,6 @@ function Library:_BuildNotificationHistory()
         Position = UDim2.fromOffset(0, 34),
         Size = UDim2.new(1, 0, 0, 1),
     })
-
-    local SearchBox = New("TextBox", {
-        BackgroundColor3 = "MainColor",
-        PlaceholderText = "Search notifications...",
-        Position = UDim2.fromOffset(8, 42),
-        Size = UDim2.new(1, -16, 0, 26),
-        Text = "",
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = Holder,
-    })
-    table.insert(
-        Library.PillCorners,
-        New("UICorner", {
-            CornerRadius = Library.CornerRadius > 0 and UDim.new(1, 0) or UDim.new(0, 0),
-            Parent = SearchBox,
-        })
-    )
-    New("UIPadding", {
-        PaddingLeft = UDim.new(0, 30),
-        PaddingRight = UDim.new(0, 12),
-        Parent = SearchBox,
-    })
-    local SearchBoxStroke = New("UIStroke", {
-        Color = "OutlineColor",
-        Parent = SearchBox,
-    })
-
-    local NotifSearchIcon = Library:GetIcon("search")
-    if NotifSearchIcon then
-        local SearchIconImage = New("ImageLabel", {
-            AnchorPoint = Vector2.new(0, 0.5),
-            ImageColor3 = "FontColor",
-            ImageTransparency = 0.5,
-            Position = UDim2.new(0, -20, 0.5, 0),
-            Size = UDim2.fromOffset(14, 14),
-            Parent = SearchBox,
-        })
-        Library:ApplyLucideIcon(SearchIconImage, NotifSearchIcon)
-    end
-
-    Library:GiveSignal(SearchBox.Focused:Connect(function()
-        Library.Registry[SearchBoxStroke].Color = "AccentColor"
-        TweenService:Create(SearchBoxStroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor }):Play()
-    end))
-    Library:GiveSignal(SearchBox.FocusLost:Connect(function()
-        Library.Registry[SearchBoxStroke].Color = "OutlineColor"
-        TweenService:Create(SearchBoxStroke, Library.TweenInfo, { Color = Library.Scheme.OutlineColor }):Play()
-    end))
-    Library:GiveSignal(SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
-        Library.NotificationHistorySearch = SearchBox.Text
-        Library:RefreshNotificationHistory()
-    end))
-
-    Library.NotificationHistorySearchBox = SearchBox
 
     --// Close (X) button in the title bar
     local CloseIcon = Library:GetIcon("x")
@@ -14733,15 +14711,12 @@ function Library:_BuildNotificationHistory()
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         CanvasSize = UDim2.fromScale(0, 0),
-        Position = UDim2.fromOffset(0, 76),
+        Position = UDim2.fromOffset(0, 35),
         ScrollBarThickness = 4,
         ScrollBarImageColor3 = "AccentColor",
-        Size = UDim2.new(1, 0, 1, -76),
-        ZIndex = Holder.ZIndex + 1,
+        Size = UDim2.new(1, 0, 1, -35),
         Parent = Holder,
     })
-
-    Library.NotificationHistoryContainer = Scroller
     New("UIListLayout", {
         Padding = UDim.new(0, 6),
         Parent = Scroller,
@@ -14787,106 +14762,21 @@ function Library:_BuildNotificationHistory()
     Library.NotificationHistoryRestPos = Holder.Position
 end
 
-local NotifHistoryClipboardIcon, NotifHistoryClipboardCheckIcon
-local NotifHistoryIconsLoaded = false
-
-function Library:_CreateNotificationHistoryCard(Entry)
-    if not NotifHistoryIconsLoaded then
-        NotifHistoryClipboardIcon = Library:GetIcon("copy")
-        NotifHistoryClipboardCheckIcon = Library:GetIcon("clipboard-check") or Library:GetIcon("check")
-        NotifHistoryIconsLoaded = true
-    end
-
-    local Scroller = Library.NotificationHistoryContainer
-    local SuccessColor = Library.NotificationTypeColors.Success or Color3.fromRGB(96, 216, 118)
-
-    local Card = New("TextButton", {
-        BackgroundColor3 = "MainColor",
-        BackgroundTransparency = 0.9,
-        Size = UDim2.new(1, 0, 0, 48),
-        AutoButtonColor = false,
-        Parent = Scroller,
-    })
-    New("UICorner", {
-        CornerRadius = UDim.new(0, 6),
-        Parent = Card,
-    })
-
-    local Title = New("TextLabel", {
-        BackgroundTransparency = 1,
-        Position = UDim2.new(0, 12, 0, 4),
-        Size = UDim2.new(1, -24, 0, 16),
-        Text = Entry.Title or "",
-        TextColor3 = "FontColor",
-        TextSize = 13,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextTruncate = Enum.TextTruncate.AtEnd,
-        Parent = Card,
-    })
-
-    local Desc = New("TextLabel", {
-        BackgroundTransparency = 1,
-        Position = UDim2.new(0, 12, 0, 24),
-        Size = UDim2.new(1, -24, 0, 16),
-        Text = Entry.Description or "",
-        TextColor3 = "FontColor",
-        TextSize = 11,
-        TextTransparency = 0.5,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextTruncate = Enum.TextTruncate.AtEnd,
-        Parent = Card,
-    })
-
-    local Time = New("TextLabel", {
-        BackgroundTransparency = 1,
-        Position = UDim2.new(1, -40, 0, 4),
-        Size = UDim2.fromOffset(36, 16),
-        Text = Entry.TimeString or "",
-        TextColor3 = "FontColor",
-        TextSize = 11,
-        TextXAlignment = Enum.TextXAlignment.Right,
-        Parent = Card,
-    })
-
-    Library:GiveSignal(Card.MouseButton1Click:Connect(function()
-        Library:ToggleNotificationHistory()
-    end))
-
-    return Card
-end
-
 function Library:RefreshNotificationHistory()
     Library:_BuildNotificationHistory()
 
     local Scroller = Library.NotificationHistoryContainer
-    if not Scroller or not Scroller.Parent then
-        return
-    end
-
     for _, Child in Scroller:GetChildren() do
         if not (Child:IsA("UIListLayout") or Child:IsA("UIPadding")) then
             Child:Destroy()
         end
     end
 
-    local Search = NormalizeSearch((Library.NotificationHistorySearch or ""):lower())
-    local Filtered = {}
-
-    if Search == "" then
-        Filtered = Library.NotificationHistory
-    else
-        for _, Entry in Library.NotificationHistory do
-            if TryFuzzyMatch(Entry.Title, Search) or TryFuzzyMatch(Entry.Description, Search) then
-                table.insert(Filtered, Entry)
-            end
-        end
-    end
-
-    if #Filtered == 0 then
+    if #Library.NotificationHistory == 0 then
         New("TextLabel", {
             BackgroundTransparency = 1,
             Size = UDim2.new(1, 0, 0, 24),
-            Text = Search == "" and "No notifications yet." or "No matching notifications.",
+            Text = "No notifications yet.",
             TextColor3 = "FontColor",
             TextTransparency = 0.4,
             TextSize = 14,
@@ -14896,22 +14786,225 @@ function Library:RefreshNotificationHistory()
         return
     end
 
+    --// "copy" is the two-page copy/paste glyph; success swaps to a checkmark
+    local ClipboardIcon = Library:GetIcon("copy")
+    local ClipboardCheckIcon = Library:GetIcon("clipboard-check") or Library:GetIcon("check")
+    local SuccessColor = Library.NotificationTypeColors.Success or Color3.fromRGB(96, 216, 118)
+    local Clipboard = (setclipboard or (typeof(toclipboard) == "function" and toclipboard) or (typeof(writeclipboard) == "function" and writeclipboard))
+
     local RenderLimit = tonumber(Library.NotificationHistoryRenderLimit) or 30
     local Rendered = 0
 
-    for _, Entry in Filtered do
+    for _, Entry in Library.NotificationHistory do
         if Rendered >= RenderLimit then
             break
         end
         Rendered += 1
-        Library:_CreateNotificationHistoryCard(Entry)
-    end
 
-    if Rendered < #Filtered then
+        local Card = New("TextButton", {
+            AutomaticSize = Enum.AutomaticSize.Y,
+            AutoButtonColor = false,
+            BackgroundColor3 = "MainColor",
+            Size = UDim2.new(1, 0, 0, 0),
+            Text = "",
+            Parent = Scroller,
+        })
+        --// Not registered in Library.Corners: cards are rebuilt on every refresh,
+        --// so they simply adopt the current radius instead of leaking references
+        New("UICorner", {
+            CornerRadius = UDim.new(0, Library.CornerRadius),
+            Parent = Card,
+        })
+        Library:AddOutline(Card)
+
+        --// Inner content holds the list; the copy icon overlays outside of it
+        local Content = New("Frame", {
+            AutomaticSize = Enum.AutomaticSize.Y,
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 0),
+            Parent = Card,
+        })
+        New("UIListLayout", {
+            Padding = UDim.new(0, 2),
+            Parent = Content,
+        })
+        New("UIPadding", {
+            PaddingBottom = UDim.new(0, 6),
+            PaddingLeft = UDim.new(0, 8),
+            PaddingRight = UDim.new(0, 24),
+            PaddingTop = UDim.new(0, 6),
+            Parent = Content,
+        })
+
+        local CopyImage
+        if ClipboardIcon then
+            CopyImage = New("ImageLabel", {
+                AnchorPoint = Vector2.new(1, 0),
+                BackgroundTransparency = 1,
+                Image = ClipboardIcon.Url,
+                ImageColor3 = "FontColor",
+                ImageRectOffset = ClipboardIcon.ImageRectOffset,
+                ImageRectSize = ClipboardIcon.ImageRectSize,
+                ImageTransparency = 0.55,
+                Position = UDim2.new(1, -7, 0, 7),
+                Size = UDim2.fromOffset(13, 13),
+                ZIndex = 6,
+                Parent = Card,
+            })
+        end
+
+        --// "Copied!" feedback, hidden until a copy happens
+        local CopiedLabel = New("TextLabel", {
+            AnchorPoint = Vector2.new(1, 0),
+            BackgroundTransparency = 1,
+            Position = UDim2.new(1, -24, 0, 5),
+            Size = UDim2.fromOffset(50, 14),
+            Text = "Copied!",
+            TextColor3 = SuccessColor,
+            TextSize = 12,
+            TextXAlignment = Enum.TextXAlignment.Right,
+            TextTransparency = 1,
+            ZIndex = 6,
+            Parent = Card,
+        })
+
+        Library:AddTooltip("Click to copy", nil, Card)
+        Card.MouseEnter:Connect(function()
+            if CopyImage then
+                TweenService:Create(CopyImage, Library.TweenInfo, { ImageTransparency = 0.1 }):Play()
+            end
+        end)
+        Card.MouseLeave:Connect(function()
+            if CopyImage then
+                TweenService:Create(CopyImage, Library.TweenInfo, { ImageTransparency = 0.55 }):Play()
+            end
+        end)
+        Card.MouseButton1Click:Connect(function()
+            local Parts = {}
+            if Entry.TimeString then
+                table.insert(Parts, string.format("[%s]", tostring(Entry.TimeString)))
+            end
+            if Entry.Title and Entry.Title ~= "nil" then
+                table.insert(Parts, tostring(Entry.Title))
+            end
+            if Entry.Description and Entry.Description ~= "nil" then
+                table.insert(Parts, tostring(Entry.Description))
+            end
+            local Text = table.concat(Parts, "\n")
+
+            local Ok = Clipboard ~= nil
+            if Ok then
+                Ok = pcall(Clipboard, Text)
+            end
+
+            --// Icon swaps to a checkmark and pops in with a little bounce
+            if CopyImage then
+                if Ok and ClipboardCheckIcon then
+                    CopyImage.Image = ClipboardCheckIcon.Url
+                    CopyImage.ImageRectOffset = ClipboardCheckIcon.ImageRectOffset
+                    CopyImage.ImageRectSize = ClipboardCheckIcon.ImageRectSize
+                end
+                CopyImage.ImageColor3 = Ok and SuccessColor or (Library.NotificationTypeColors.Error or Color3.fromRGB(255, 76, 76))
+                CopyImage.ImageTransparency = 0
+
+                CopyImage.Size = UDim2.fromOffset(9, 9)
+                TweenService:Create(CopyImage, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                    Size = UDim2.fromOffset(13, 13),
+                }):Play()
+            end
+
+            --// "Copied!" tag rises up while fading in then out
+            CopiedLabel.Text = Ok and "Copied!" or "No clipboard"
+            CopiedLabel.TextColor3 = Ok and SuccessColor or (Library.NotificationTypeColors.Error or Color3.fromRGB(255, 76, 76))
+            CopiedLabel.TextTransparency = 0
+            CopiedLabel.Position = UDim2.new(1, -24, 0, 9)
+            TweenService:Create(CopiedLabel, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                Position = UDim2.new(1, -24, 0, 5),
+            }):Play()
+            TweenService:Create(CopiedLabel, TweenInfo.new(0.9, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+                TextTransparency = 1,
+            }):Play()
+
+            task.delay(0.9, function()
+                if CopyImage and CopyImage.Parent then
+                    if ClipboardIcon then
+                        CopyImage.Image = ClipboardIcon.Url
+                        CopyImage.ImageRectOffset = ClipboardIcon.ImageRectOffset
+                        CopyImage.ImageRectSize = ClipboardIcon.ImageRectSize
+                    end
+                    CopyImage.ImageColor3 = Library.Scheme.FontColor
+                    TweenService:Create(CopyImage, Library.TweenInfo, { ImageTransparency = 0.55 }):Play()
+                end
+            end)
+        end)
+
+        local Header = New("Frame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 14),
+            Parent = Content,
+        })
+        New("UIListLayout", {
+            FillDirection = Enum.FillDirection.Horizontal,
+            VerticalAlignment = Enum.VerticalAlignment.Center,
+            Padding = UDim.new(0, 6),
+            Parent = Header,
+        })
+        New("TextLabel", {
+            AutomaticSize = Enum.AutomaticSize.X,
+            BackgroundTransparency = 1,
+            Size = UDim2.new(0, 0, 1, 0),
+            Text = string.format("[%s]", tostring(Entry.TimeString or "")),
+            TextColor3 = "AccentColor",
+            TextSize = 12,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = Header,
+        })
+        if Entry.Type then
+            New("TextLabel", {
+                AutomaticSize = Enum.AutomaticSize.X,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(0, 0, 1, 0),
+                Text = string.upper(tostring(Entry.Type)),
+                TextColor3 = Library.NotificationTypeColors[Entry.Type] or "FontColor",
+                TextSize = 12,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = Header,
+            })
+        end
+
+        if Entry.Title and Entry.Title ~= "nil" then
+            New("TextLabel", {
+                AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, 0, 0, 0),
+                Text = tostring(Entry.Title),
+                TextColor3 = Entry.TitleColor or "FontColor",
+                TextSize = 15,
+                TextWrapped = true,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = Content,
+            })
+        end
+
+        if Entry.Description and Entry.Description ~= "nil" then
+            New("TextLabel", {
+                AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, 0, 0, 0),
+                Text = tostring(Entry.Description),
+                TextColor3 = Entry.DescriptionColor or "FontColor",
+                TextSize = 14,
+                TextWrapped = true,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = Content,
+            })
+        end
+    end
+    if Rendered < #Library.NotificationHistory then
         New("TextLabel", {
             BackgroundTransparency = 1,
             Size = UDim2.new(1, 0, 0, 20),
-            Text = string.format("+%d more — refine your search to see them", #Filtered - Rendered),
+            Text = string.format("+%d more", #Library.NotificationHistory - Rendered),
             TextColor3 = "FontColor",
             TextTransparency = 0.5,
             TextSize = 12,
@@ -14977,6 +15070,7 @@ function Library:ToggleNotificationHistory()
     Library:_BuildNotificationHistory()
     Library:SetNotificationHistoryVisible(not Library.NotificationHistoryOpen)
 end
+
 
 function Library:CreateWindow(WindowInfo)
     WindowInfo = Library:Validate(WindowInfo, Templates.Window)
