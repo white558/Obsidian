@@ -1849,18 +1849,39 @@ end
 
 local function getBackgroundAsset(Value)
     if typeof(Value) == "number" then
-        Value = "rbxassetid://" .. tostring(Value)
+        return "rbxassetid://" .. tostring(Value)
     end
 
-    if typeof(Value) ~= "string" or Value == "" then
+    if typeof(Value) ~= "string" then
         return nil
     end
 
-    if not Value:match("^https?://") then
-        return Value:match("^rbxassetid://") and Value or "rbxassetid://" .. Value
+    Value = Value:match("^%s*(.-)%s*$")
+    if Value == "" then
+        return nil
     end
 
-    return BackgroundAssetCache[Value]
+    -- Roblox asset/content strings can be assigned directly.
+    if Value:match("^rbxassetid://")
+        or Value:match("^rbxasset://")
+        or Value:match("^content://")
+    then
+        return Value
+    end
+
+    -- A bare numeric string is also a valid asset id.
+    if tonumber(Value) then
+        return "rbxassetid://" .. Value
+    end
+
+    -- Web images are downloaded asynchronously by requestBackgroundAsset.
+    if Value:match("^https?://") then
+        return BackgroundAssetCache[Value]
+    end
+
+    -- Do not manufacture "rbxassetid://https://..." which can make
+    -- ImageLabel assignment fail in some Roblox/executor environments.
+    return nil
 end
 
 local function requestBackgroundAsset(Value)
@@ -1969,12 +1990,13 @@ end
 function Library:RefreshBackgroundTargets()
     local Value = Library.Scheme.BackgroundImage
     local Asset = getBackgroundAsset(Value)
+
     if typeof(Value) == "string" and Value:match("^https?://") and not Asset then
         requestBackgroundAsset(Value)
     end
 
     for Target in BackgroundTargets do
-        applyBackgroundTarget(Target, Asset)
+        pcall(applyBackgroundTarget, Target, Asset)
     end
 end
 
@@ -13630,19 +13652,20 @@ end
 function Library:SetBackgroundImage(Image: (string | number)?)
     if Image ~= nil and typeof(Image) ~= "string" and typeof(Image) ~= "number" then
         warn(("Library:SetBackgroundImage expected string, number or nil, got %s"):format(typeof(Image)))
-        return
+        return Library
     end
 
+    if typeof(Image) == "string" then
+        Image = Image:match("^%s*(.-)%s*$")
+    end
     Image = Image or ""
 
     Library.Scheme.BackgroundImage = Image
-    if Library.Window then
-        Library.Window:SetBackgroundImage(Image)
-    else
-        Library:RefreshBackgroundTargets()
-    end
 
-    Library:UpdateColorsUsingRegistry()
+    pcall(Library.RefreshBackgroundTargets, Library)
+    pcall(Library.UpdateColorsUsingRegistry, Library)
+
+    return Library
 end
 
 function Library:UpdateNotificationPositions(Snap: boolean?)
@@ -14490,6 +14513,9 @@ end
 
 function Library:ClearNotificationHistory()
     table.clear(Library.NotificationHistory)
+    Library.NotificationUnreadCount = 0
+    Library:UpdateNotificationBadge()
+
     if Library.NotificationHistoryFrame and Library.NotificationHistoryFrame.Visible then
         Library:RefreshNotificationHistory()
     end
@@ -14559,9 +14585,11 @@ function Library:_BuildNotificationHistory()
         Size = UDim2.fromOffset(NOTIFY_HISTORY_SIZE.X, NOTIFY_HISTORY_SIZE.Y),
         GroupTransparency = 1,
         Visible = false,
-        ZIndex = 10,
+        ZIndex = 10000,
         Parent = ScreenGui,
     })
+
+    Library.NotificationHistoryFrame = Holder
     table.insert(
         Library.Corners,
         New("UICorner", {
@@ -14709,8 +14737,11 @@ function Library:_BuildNotificationHistory()
         ScrollBarThickness = 4,
         ScrollBarImageColor3 = "AccentColor",
         Size = UDim2.new(1, 0, 1, -76),
+        ZIndex = Holder.ZIndex + 1,
         Parent = Holder,
     })
+
+    Library.NotificationHistoryContainer = Scroller
     New("UIListLayout", {
         Padding = UDim.new(0, 6),
         Parent = Scroller,
@@ -14828,6 +14859,10 @@ function Library:RefreshNotificationHistory()
     Library:_BuildNotificationHistory()
 
     local Scroller = Library.NotificationHistoryContainer
+    if not Scroller or not Scroller.Parent then
+        return
+    end
+
     for _, Child in Scroller:GetChildren() do
         if not (Child:IsA("UIListLayout") or Child:IsA("UIPadding")) then
             Child:Destroy()
@@ -14890,6 +14925,10 @@ function Library:SetNotificationHistoryVisible(Visible: boolean)
     Library:_BuildNotificationHistory()
 
     local Frame = Library.NotificationHistoryFrame
+    if not Frame or not Frame.Parent then
+        return
+    end
+
     Visible = Visible and true or false
 
     if Library.NotificationHistoryOpen == Visible then
@@ -16578,8 +16617,12 @@ function Library:CreateWindow(WindowInfo)
             return Window
         end
 
+        if typeof(Image) == "string" then
+            Image = Image:match("^%s*(.-)%s*$")
+        end
+
         Library.Scheme.BackgroundImage = Image or ""
-        Library:RefreshBackgroundTargets()
+        pcall(Library.RefreshBackgroundTargets, Library)
         return Window
     end
 
