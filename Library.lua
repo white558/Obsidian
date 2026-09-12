@@ -21905,6 +21905,20 @@ Library:GiveSignal(Teams.ChildAdded:Connect(OnTeamChange))
 Library:GiveSignal(Teams.ChildRemoved:Connect(OnTeamChange))
 
 function Library:Unload()
+    for _, Toggle in pairs(Toggles) do
+        pcall(function()
+            Toggle:SetValue(false)
+        end)
+    end
+
+    for _, Option in pairs(Options) do
+        pcall(function()
+            if Option.Type == "KeyPicker" then
+                Option:SetValue({ "F15", Option.Mode, {} })
+            end
+        end)
+    end
+
     Library.Unloaded = true
 
     --// Disconnect connections
