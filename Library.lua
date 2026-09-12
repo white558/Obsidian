@@ -408,7 +408,7 @@ local Templates = {
         CopyableFooter = true,
 
         Position = UDim2.fromOffset(6, 6),
-        Size = UDim2.fromOffset(720, 600),
+        Size = UDim2.fromOffset(600, 520),
         IconSize = UDim2.fromOffset(30, 30),
 
         AutoShow = true,
@@ -16071,15 +16071,17 @@ function Library:CreateWindow(WindowInfo)
             Library:AddToRegistry(Tag, { TextColor3 = Fg })
         end
 
-        function Tag:SetText(NewText)
+        local tagTbl = {}
+
+        function tagTbl:SetText(NewText)
             Tag.Text = tostring(NewText or "")
         end
 
-        function Tag:SetVisible(Visible)
+        function tagTbl:SetVisible(Visible)
             Tag.Visible = Visible == true
         end
 
-        function Tag:SetBackgroundColor(Color)
+        function tagTbl:SetBackgroundColor(Color)
             local Resolved = ResolveColor(Color, Library.Scheme.AccentColor)
             Tag.BackgroundColor3 = Resolved
             if typeof(Color) == "string" then
@@ -16089,22 +16091,22 @@ function Library:CreateWindow(WindowInfo)
             end
         end
 
-        function Tag:SetTextColor(Color)
+        function tagTbl:SetTextColor(Color)
             local Resolved = ResolveColor(Color, Library.Scheme.FontColor)
             Tag.TextColor3 = Resolved
         end
 
-        function Tag:SetOrder(NewOrder)
+        function tagTbl:SetOrder(NewOrder)
             Tag.LayoutOrder = tonumber(NewOrder) or 0
         end
 
-        function Tag:Remove()
+        function tagTbl:Remove()
             if Tag and Tag.Parent then
                 Tag:Destroy()
             end
         end
 
-        return Tag
+        return tagTbl
     end
 
     --// Ported from Sizsense: user profile card at bottom of sidebar

@@ -1,8 +1,8 @@
 local cloneref = (cloneref or clonereference or function(instance: any)
     return instance
 end)
-local clonefunction = (clonefunction or copyfunction or function(func) 
-    return func 
+local clonefunction = (clonefunction or copyfunction or function(func)
+    return func
 end)
 
 local HttpService: HttpService = cloneref(game:GetService("HttpService"))
@@ -404,7 +404,7 @@ do
         groupbox:AddLabel("Font Color"):AddColorPicker("FontColor", { Default = self.Library.Scheme.FontColor })
         --groupbox:AddToggle("BackgroundImageEnabled", { Text = "Background Image", Default = self.Library.Scheme.BackgroundImageEnabled })
         --groupbox:AddInput("BackgroundImage", { Text = "Background Image:", Default = ""})
-        groupbox:AddToggle("WindowGlow", { Text = "Window Glow",  Default = self.Library.Scheme.WindowGlow })
+        --groupbox:AddToggle("WindowGlow", { Text = "Window Glow",  Default = self.Library.Scheme.WindowGlow })
         groupbox:AddDropdown("FontFace", { Text = "Font Face:", Default = "Code", Values = self.Fonts })
 
         local ThemesArray = {}
@@ -630,10 +630,10 @@ do
         --     self.Library:SetBackgroundImageEnabled(Value)
         --     self.Library:UpdateColorsUsingRegistry()
         -- end)
-        self.Library.Toggles.WindowGlow:OnChanged(function(Value)
-            self.Library:SetGlow(Value)
-            self.Library:UpdateColorsUsingRegistry()
-        end)
+        -- self.Library.Toggles.WindowGlow:OnChanged(function(Value)
+        --     self.Library:SetGlow(Value)
+        --     self.Library:UpdateColorsUsingRegistry()
+        -- end)
         -- self.Library.Options.BackgroundImage:OnChanged(function(Value)
         --     self.Library:SetBackgroundImage(Value)
         --     self.Library:UpdateColorsUsingRegistry()
