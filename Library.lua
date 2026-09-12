@@ -7064,12 +7064,32 @@ do
         end
 
         function TableObj:AddRow(rowData)
-            if #self.Rows >= self.MaxRows then
+            if typeof(rowData) ~= "table" then
+                error("AddRow expects a table.")
+            end
+
+            if #self.OriginalData >= self.MaxRows then
                 return nil
             end
+
             table.insert(self.OriginalData, rowData)
+
+            if self.SortColumn then
+                self:Sort()
+                return self.Rows[#self.Rows]
+            end
+
             local row = self:CreateRow(rowData, #self.Rows + 1)
             table.insert(self.Rows, row)
+
+            task.defer(function()
+                if not self.Destroyed and Groupbox and not Groupbox.Destroyed then
+                    pcall(function()
+                        Groupbox:Resize()
+                    end)
+                end
+            end)
+
             return row
         end
 
@@ -7103,23 +7123,55 @@ do
         end
 
         function TableObj:SetVisible(Visible)
-            self.Visible = Visible
-            Holder.Visible = Visible
-            Groupbox:Resize()
+            self.Visible = Visible == true
+            Holder.Visible = self.Visible
+            pcall(function()
+                Groupbox:Resize()
+            end)
         end
 
         function TableObj:GetRowCount()
             return #self.Rows
         end
 
+        function TableObj:Destroy()
+            if self.Destroyed then
+                return
+            end
+            self.Destroyed = true
+
+            for _, row in ipairs(self.Rows) do
+                if row.Frame then
+                    row.Frame:Destroy()
+                end
+            end
+            table.clear(self.Rows)
+
+            if Holder then
+                Holder:Destroy()
+            end
+
+            if not Groupbox.Destroyed then
+                local Index = table.find(Groupbox.Elements, self)
+                if Index then
+                    table.remove(Groupbox.Elements, Index)
+                end
+            end
+        end
+
         if Info.Rows and #Info.Rows > 0 then
             TableObj:SetRows(Info.Rows)
         end
 
-        pcall(function()
-            Groupbox:Resize()
-        end)
         table.insert(Groupbox.Elements, TableObj)
+
+        task.defer(function()
+            if not TableObj.Destroyed and Groupbox and not Groupbox.Destroyed then
+                pcall(function()
+                    Groupbox:Resize()
+                end)
+            end
+        end)
 
         if Idx then
             Options[Idx] = TableObj
@@ -13478,14 +13530,12 @@ function Library:Notify(...)
     end
     Data.Destroyed = false
 
-    --// Apply the type color to the primary text unless one was given explicitly
     local TypeColor = Data.Type and Library.NotificationTypeColors[Data.Type]
-    if TypeColor then
-        if Data.Title and Data.Title ~= "nil" then
-            Data.TitleColor = Data.TitleColor or TypeColor
-        else
-            Data.DescriptionColor = Data.DescriptionColor or TypeColor
-        end
+    Data.TitleColor = Data.TitleColor or "AccentColor"
+    Data.IconColor = Data.IconColor or "AccentColor"
+
+    if TypeColor and not Data.Title then
+        Data.DescriptionColor = Data.DescriptionColor or TypeColor
     end
 
     local DeletedInstance = false
@@ -13595,7 +13645,7 @@ function Library:Notify(...)
                 AnchorPoint = Vector2.new(0, 0.5),
                 Position = UDim2.new(0, 0, 0.5, 1),
                 Size = UDim2.fromOffset(15, 15),
-                ImageColor3 = Data.IconColor or "FontColor",
+                ImageColor3 = Data.IconColor or "AccentColor",
                 Parent = TitleContainer,
             })
             Library:ApplyLucideIcon(IconLabel, ParsedIcon)
@@ -13617,7 +13667,7 @@ function Library:Notify(...)
             Position = UDim2.new(0, (Data.Icon and 21 or 0), 0.5, 0),
             Size = UDim2.fromScale(0, 0),
             Text = Data.Title,
-            TextColor3 = Data.TitleColor or "FontColor",
+            TextColor3 = Data.TitleColor or "AccentColor",
             TextSize = 15,
             TextXAlignment = Enum.TextXAlignment.Left,
             TextYAlignment = Enum.TextYAlignment.Center,
@@ -14880,21 +14930,28 @@ function Library:CreateWindow(WindowInfo)
             ZIndex = 2
         })
 
-        local BackgroundIcon = Library:GetCustomIcon(WindowInfo.BackgroundImage)
+        local BackgroundIcon
+        pcall(function()
+            BackgroundIcon = Library:GetCustomIcon(WindowInfo.BackgroundImage)
+        end)
+
         HasBackgroundImage = BackgroundIcon ~= nil
         BackgroundImage = New("ImageLabel", {
             Active = false,
             Position = UDim2.fromScale(0, 0),
             Size = UDim2.fromScale(1, 1),
             ScaleType = Enum.ScaleType.Stretch,
-            ZIndex = Overlay.ZIndex + 1,
+            ZIndex = -1,
             BackgroundTransparency = 1,
-            ImageTransparency = 0.75,
-            Visible = false,
-            Parent = ScreenGui,
+            ImageTransparency = 0.8,
+            Visible = HasBackgroundImage,
+            Parent = MainFrame,
         })
+
         if BackgroundIcon then
-            Library:ApplyLucideIcon(BackgroundImage, BackgroundIcon)
+            pcall(function()
+                Library:ApplyLucideIcon(BackgroundImage, BackgroundIcon)
+            end)
         end
 
         table.insert(
@@ -14904,28 +14961,6 @@ function Library:CreateWindow(WindowInfo)
                 Parent = BackgroundImage,
             })
         )
-
-        Library:GiveSignal(RunService.RenderStepped:Connect(function()
-            if not (BackgroundImage and MainFrame) then
-                return
-            end
-
-            local ShouldShow = HasBackgroundImage and MainFrame.Visible
-            BackgroundImage.Visible = ShouldShow
-
-            if not ShouldShow then
-                return
-            end
-
-            BackgroundImage.Position = UDim2.fromOffset(
-                MainFrame.AbsolutePosition.X,
-                MainFrame.AbsolutePosition.Y
-            )
-            BackgroundImage.Size = UDim2.fromOffset(
-                MainFrame.AbsoluteSize.X,
-                MainFrame.AbsoluteSize.Y
-            )
-        end))
 
         --// Background Video (medium-high risk)
         local function ResolveVideoId(Video)
@@ -15070,6 +15105,7 @@ function Library:CreateWindow(WindowInfo)
             AutomaticSize = Enum.AutomaticSize.X,
             BackgroundTransparency = 1,
             Size = UDim2.fromOffset(0, 20),
+            Visible = not IsCompact,
             Parent = TitleHolder,
         })
         New("UIListLayout", {
@@ -16052,6 +16088,7 @@ function Library:CreateWindow(WindowInfo)
             TextColor3 = FgColor,
             TextSize = TextSize,
             AutoButtonColor = false,
+            Visible = not IsCompact,
             Parent = TagsHolder,
         })
         New("UIPadding", {
@@ -16097,6 +16134,11 @@ function Library:CreateWindow(WindowInfo)
         function tagTbl:SetTextColor(Color)
             local Resolved = ResolveColor(Color, Library.Scheme.FontColor)
             Tag.TextColor3 = Resolved
+            if typeof(Color) == "string" then
+                Library:AddToRegistry(Tag, { TextColor3 = Color })
+            else
+                Library:RemoveFromRegistry(Tag)
+            end
         end
 
         function tagTbl:SetOrder(NewOrder)
@@ -16120,8 +16162,13 @@ function Library:CreateWindow(WindowInfo)
         StatusBadge = nil,
         StatusLabel = nil,
         LogoutCallback = nil,
+        Container = nil,
+        AvatarHolder = nil,
+        Info = nil,
+        LogoutButton = nil,
         OriginalName = "",
         NameVisible = true,
+        SetCompact = nil,
     }
 
     local function EnsureUserProfile()
@@ -16280,6 +16327,31 @@ function Library:CreateWindow(WindowInfo)
         UserProfileRefs.UsernameLabel = UsernameLabel
         UserProfileRefs.StatusBadge = StatusBadge
         UserProfileRefs.StatusLabel = StatusLabel
+        UserProfileRefs.Container = Container
+        UserProfileRefs.AvatarHolder = AvatarHolder
+        UserProfileRefs.Info = Info
+        UserProfileRefs.LogoutButton = LogoutButton
+
+        UserProfileRefs.SetCompact = function(Compact)
+            if not UserProfileRefs.Holder then
+                return
+            end
+
+            local Width = Compact and WindowInfo.SidebarCompactWidth or TitleHolder.Size.X.Offset
+            UserProfileRefs.Holder.Size = UDim2.new(0, Width, 0, 56)
+
+            if Compact then
+                AvatarHolder.Position = UDim2.new(0.5, 0, 0.5, 0)
+                AvatarHolder.AnchorPoint = Vector2.new(0.5, 0.5)
+                Info.Visible = false
+                LogoutButton.Visible = false
+            else
+                AvatarHolder.Position = UDim2.fromOffset(10, 8)
+                AvatarHolder.AnchorPoint = Vector2.zero
+                Info.Visible = true
+                LogoutButton.Visible = true
+            end
+        end
     end
 
     function Window:SetUserProfile(Info)
@@ -16287,7 +16359,9 @@ function Library:CreateWindow(WindowInfo)
         EnsureUserProfile()
 
         UserProfileRefs.Holder.Visible = true
-        UserProfileRefs.Holder.Size = UDim2.new(0, TitleHolder.Size.X.Offset, 0, 56)
+        if UserProfileRefs.SetCompact then
+            UserProfileRefs.SetCompact(IsCompact)
+        end
 
         if Info.UserId then
             UserProfileRefs.Avatar.Image = string.format(
@@ -16334,6 +16408,9 @@ function Library:CreateWindow(WindowInfo)
         return Window
     end
 
+    --// Compatibility alias: both spellings are supported.
+    Window.AddUserProfile = Window.SetUserProfile
+
     function Window:HideUserProfile()
         if UserProfileRefs.Holder then
             UserProfileRefs.Holder.Visible = false
@@ -16343,47 +16420,66 @@ function Library:CreateWindow(WindowInfo)
         return Window
     end
 
-    function Window:SetBackgroundImage(Image: string)
+    function Window:SetBackgroundImage(Image: string | number)
         local ValidIcon = false
+        local ResolvedImage = ""
 
-        if typeof(Image) == "string" then
-            local BackgroundIcon = Library:GetCustomIcon(Image)
+        if typeof(Image) == "number" then
+            Image = tostring(Image)
+        end
 
-            if BackgroundIcon then
-                ValidIcon = true
+        if typeof(Image) == "string" and Image ~= "" then
+            local BackgroundIcon
+            pcall(function()
+                BackgroundIcon = Library:GetCustomIcon(Image)
+            end)
 
-                Library:ApplyLucideIcon(BackgroundImage, BackgroundIcon)
-            elseif Image:match("http://") or Image:match("https://") then
-                local RawFileName = Image:match("(.+)%..+$")
-                local _, Domain = Image:match("^(https?://)([^/]+)");
+            if BackgroundIcon and BackgroundIcon.Url and BackgroundIcon.Url ~= "" then
+                local Applied = pcall(function()
+                    Library:ApplyLucideIcon(BackgroundImage, BackgroundIcon)
+                end)
 
-                if RawFileName and Domain then
-                    local Extention = string.sub(Image, #RawFileName + 1, #Image)
-                    local FileNamePos = RawFileName:gsub("\\", "/"):find("/[^/]*$")
-                    local FileName = FileNamePos and Image:sub(FileNamePos + 1) or nil
+                if Applied then
+                    ValidIcon = true
+                    ResolvedImage = BackgroundIcon.Url
+                end
+            elseif Image:match("^https?://") and getcustomasset and writefile and isfile then
+                local URL = Image
+                local FileName = URL:match("/([^/?#]+)%.[^/?#]+$")
+                if FileName and FileName ~= "" then
+                    local SafeFileName = FileName:gsub("[^%w%._%-]", "_")
+                    local Extension = URL:match("%.([%w]+)(?:[?#].*)?$")
+                    if Extension then
+                        SafeFileName = SafeFileName .. "." .. Extension
+                    end
 
-                    if FileName then
-                        ValidIcon = true
+                    local Downloaded = false
+                    pcall(function()
+                        if CustomImageManagerAssets[SafeFileName] == nil then
+                            CustomImageManagerAssets[SafeFileName] = {
+                                RobloxId = 0,
+                                Path = string.format("Obsidian/custom_assets/%s", SafeFileName),
+                                URL = URL,
+                                Id = nil,
+                            }
+                        end
 
-                        local AssetName = Domain .. FileName
-                        if #AssetName > 255 then
-                            local NewLength = 255 - #Domain - #Extention
-                            if NewLength < 0 then
-                                AssetName = Domain .. Extention
-                            else
-                                AssetName = Domain .. string.sub(FileName:sub(1, #FileName - #Extention), 1, NewLength) .. Extention
+                        local AssetData = CustomImageManagerAssets[SafeFileName]
+                        local Success = CustomImageManager.DownloadAsset(SafeFileName, true)
+                        if Success and isfile(AssetData.Path) then
+                            local AssetId = CustomImageManager.GetAsset(SafeFileName)
+                            if typeof(AssetId) == "string" and AssetId ~= "" and AssetId ~= "rbxassetid://0" then
+                                BackgroundImage.Image = AssetId
+                                BackgroundImage.ImageRectOffset = Vector2.zero
+                                BackgroundImage.ImageRectSize = Vector2.zero
+                                Downloaded = true
                             end
                         end
+                    end)
 
-                        if CustomImageManagerAssets[FileName] == nil then
-                            CustomImageManager.AddAsset(FileName, 0, Image)
-                        else
-                            CustomImageManager.DownloadAsset(FileName, true)
-                        end
-
-                        BackgroundImage.Image = CustomImageManager.GetAsset(FileName)
-                        BackgroundImage.ImageRectOffset = Vector2.zero
-                        BackgroundImage.ImageRectSize = Vector2.zero
+                    ValidIcon = Downloaded
+                    if Downloaded then
+                        ResolvedImage = BackgroundImage.Image
                     end
                 end
             end
@@ -16396,7 +16492,9 @@ function Library:CreateWindow(WindowInfo)
         end
 
         HasBackgroundImage = ValidIcon
-        WindowInfo.BackgroundImage = Image
+        BackgroundImage.Visible = ValidIcon and MainFrame.Visible
+        WindowInfo.BackgroundImage = ValidIcon and Image or ""
+        return Window
     end
 
     function Window:SetBackgroundVideo(Video: string | number?)
@@ -16977,6 +17075,12 @@ function Library:CreateWindow(WindowInfo)
         Library.SidebarCompacted = IsCompact
 
         WindowTitle.Visible = not IsCompact
+        if TagsHolder then
+            TagsHolder.Visible = not IsCompact
+        end
+        if UserProfileRefs and UserProfileRefs.SetCompact then
+            UserProfileRefs.SetCompact(IsCompact)
+        end
         if not WindowInfo.Icon then
             WindowIcon.Visible = IsCompact
         end
@@ -18338,18 +18442,42 @@ function Library:CreateWindow(WindowInfo)
             local CollapseArrowTween
 
             function Groupbox:Resize()
+                if self.Destroyed or not GroupboxHolder or not GroupboxHolder.Parent then
+                    return
+                end
+
                 if ResizeTween then
                     StopTween(ResizeTween, true)
                     ResizeTween = nil
                 end
 
-                local TopSize = (GroupboxTop.AbsoluteSize.Y / Library.DPIScale)
-                local ContainerSize = (GroupboxList.AbsoluteContentSize.Y / Library.DPIScale) + 14
-                if Groupbox.PoppedOut then
-                    ContainerSize = math.min(ContainerSize, GetPopOutBodyMaxHeight(Groupbox, TopSize + 1))
+                local Scale = tonumber(Library.DPIScale) or 1
+                if Scale <= 0 then
+                    Scale = 1
                 end
 
-                local TargetSize = UDim2.new(1, 0, 0, if Groupbox.Collapsed then TopSize else (TopSize + 1 + ContainerSize))
+                local TopSize = 0
+                local ContentSize = 0
+
+                pcall(function()
+                    TopSize = GroupboxTop.AbsoluteSize.Y / Scale
+                    ContentSize = GroupboxList.AbsoluteContentSize.Y / Scale
+                end)
+
+                TopSize = math.max(0, tonumber(TopSize) or 0)
+                local ContainerSize = math.max(0, (tonumber(ContentSize) or 0) + 14)
+
+                if Groupbox.PoppedOut then
+                    ContainerSize = math.max(
+                        0,
+                        math.min(ContainerSize, GetPopOutBodyMaxHeight(Groupbox, TopSize + 1))
+                    )
+                end
+
+                local BodySize = Groupbox.Collapsed and TopSize or (TopSize + 1 + ContainerSize)
+                BodySize = math.max(0, BodySize)
+
+                local TargetSize = UDim2.new(1, 0, 0, BodySize)
                 GroupboxContainer.Size = UDim2.new(1, 0, 0, ContainerSize)
                 GroupboxLine.Visible = not Groupbox.Collapsed
 
