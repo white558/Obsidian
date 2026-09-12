@@ -1818,6 +1818,163 @@ local Overlay = New("Frame", {
 Library.Floats = Floats
 Library.Overlay = Overlay
 
+local BackgroundTargets = {}
+local BackgroundAssetCache = {}
+local BackgroundAssetPending = {}
+
+local function safeGetCustomAsset(path)
+    if getcustomasset then
+        local Success, Result = pcall(getcustomasset, path)
+        if Success then return Result end
+    elseif getsynasset then
+        local Success, Result = pcall(getsynasset, path)
+        if Success then return Result end
+    elseif syn and syn.get_custom_asset then
+        local Success, Result = pcall(syn.get_custom_asset, path)
+        if Success then return Result end
+    end
+    return nil
+end
+
+local function safeMakeFolder(path)
+    if isfolder and not isfolder(path) then
+        pcall(makefolder, path)
+    elseif makefolder then
+        pcall(makefolder, path)
+    end
+end
+
+local function getBackgroundAsset(Value)
+    if typeof(Value) == "number" then
+        Value = "rbxassetid://" .. tostring(Value)
+    end
+
+    if typeof(Value) ~= "string" or Value == "" then
+        return nil
+    end
+
+    if not Value:match("^https?://") then
+        return Value:match("^rbxassetid://") and Value or "rbxassetid://" .. Value
+    end
+
+    return BackgroundAssetCache[Value]
+end
+
+local function requestBackgroundAsset(Value)
+    if typeof(Value) ~= "string" or not Value:match("^https?://") then
+        return
+    end
+    if BackgroundAssetCache[Value] or BackgroundAssetPending[Value] then
+        return
+    end
+
+    BackgroundAssetPending[Value] = true
+    task.spawn(function()
+        local AssetId
+        local Success, Result = pcall(function()
+            safeMakeFolder("Obsidian")
+            safeMakeFolder("Obsidian/custom_assets")
+
+            local Name = Value:gsub("[^%w%._-]", "_")
+            if #Name > 180 then
+                Name = Name:sub(-180)
+            end
+            local FilePath = "Obsidian/custom_assets/bg_" .. Name
+
+            if not isfile or not isfile(FilePath) then
+                if not writefile then
+                    return nil
+                end
+                local Ok, Data = pcall(game.HttpGet, game, Value)
+                if not Ok or type(Data) ~= "string" or Data == "" then
+                    return nil
+                end
+                local Written = pcall(writefile, FilePath, Data)
+                if not Written then
+                    return nil
+                end
+            end
+
+            return safeGetCustomAsset(FilePath)
+        end)
+
+        if Success and Result and Result ~= "" then
+            AssetId = Result
+            BackgroundAssetCache[Value] = AssetId
+        end
+
+        BackgroundAssetPending[Value] = nil
+
+        if Library.Scheme.BackgroundImage == Value then
+            Library:RefreshBackgroundTargets()
+        end
+    end)
+end
+
+local function applyBackgroundTarget(Target, Asset)
+    if not Target or not Target.Parent then
+        BackgroundTargets[Target] = nil
+        return
+    end
+
+    local Existing = Target:FindFirstChild("CustomBackground")
+    if Existing then
+        Existing:Destroy()
+    end
+
+    if not Asset then
+        return
+    end
+
+    local Background = New("ImageLabel", {
+        Name = "CustomBackground",
+        Active = false,
+        BackgroundTransparency = 1,
+        Image = Asset,
+        ImageTransparency = 0.8,
+        Position = UDim2.fromScale(0, 0),
+        ScaleType = Enum.ScaleType.Stretch,
+        Size = UDim2.fromScale(1, 1),
+        ZIndex = math.max(0, Target.ZIndex - 1),
+        Parent = Target,
+    })
+
+    local Corner = Target:FindFirstChildOfClass("UICorner")
+    if Corner then
+        New("UICorner", {
+            CornerRadius = Corner.CornerRadius,
+            Parent = Background,
+        })
+    end
+end
+
+function Library:RegisterBackgroundTarget(Target)
+    if not Target or not Target:IsA("GuiObject") then
+        return
+    end
+
+    BackgroundTargets[Target] = true
+    local Value = Library.Scheme.BackgroundImage
+    local Asset = getBackgroundAsset(Value)
+    if Asset then
+        applyBackgroundTarget(Target, Asset)
+    elseif typeof(Value) == "string" and Value:match("^https?://") then
+        requestBackgroundAsset(Value)
+    end
+end
+
+function Library:RefreshBackgroundTargets()
+    local Value = Library.Scheme.BackgroundImage
+    local Asset = getBackgroundAsset(Value)
+    if typeof(Value) == "string" and Value:match("^https?://") and not Asset then
+        requestBackgroundAsset(Value)
+    end
+
+    for Target in BackgroundTargets do
+        applyBackgroundTarget(Target, Asset)
+    end
+end
+
 --// Cursor
 local Cursor, CursorCustomImage
 do
@@ -2825,6 +2982,7 @@ function Library:MakeBoxPopOut(Box: any, Options: {
                 ZIndex = 1,
                 Parent = Floats,
             })
+            Library:RegisterBackgroundTarget(Float)
             FloatScale = New("UIScale", {
                 Parent = Float,
             })
@@ -4177,6 +4335,7 @@ function Library:AddContextMenu(
     end
 
     table.insert(Library.ContextMenus, Table)
+    Library:RegisterBackgroundTarget(Menu)
     return Table
 end
 
@@ -7134,6 +7293,24 @@ do
             return #self.Rows
         end
 
+        if Info.Rows and #Info.Rows > 0 then
+            TableObj:SetRows(Info.Rows)
+        end
+
+        table.insert(Groupbox.Elements, TableObj)
+
+        task.defer(function()
+            if not TableObj.Destroyed and Groupbox and not Groupbox.Destroyed then
+                pcall(function()
+                    Groupbox:Resize()
+                end)
+            end
+        end)
+
+        if Idx then
+            Options[Idx] = TableObj
+        end
+
         function TableObj:Destroy()
             if self.Destroyed then
                 return
@@ -7157,24 +7334,6 @@ do
                     table.remove(Groupbox.Elements, Index)
                 end
             end
-        end
-
-        if Info.Rows and #Info.Rows > 0 then
-            TableObj:SetRows(Info.Rows)
-        end
-
-        table.insert(Groupbox.Elements, TableObj)
-
-        task.defer(function()
-            if not TableObj.Destroyed and Groupbox and not Groupbox.Destroyed then
-                pcall(function()
-                    Groupbox:Resize()
-                end)
-            end
-        end)
-
-        if Idx then
-            Options[Idx] = TableObj
         end
 
         return TableObj
@@ -10574,6 +10733,7 @@ do
                 ZIndex = 8001,
                 Parent = ExpandOverlay,
             })
+            Library:RegisterBackgroundTarget(ExpandFrame)
             table.insert(
                 Library.Corners,
                 New("UICorner", {
@@ -13447,6 +13607,8 @@ function Library:SetBackgroundImage(Image: string | number)
     Library.Scheme.BackgroundImage = Image
     if Library.Window then
         Library.Window:SetBackgroundImage(Image)
+    else
+        Library:RefreshBackgroundTargets()
     end
 
     Library:UpdateColorsUsingRegistry()
@@ -13530,10 +13692,10 @@ function Library:Notify(...)
     end
     Data.Destroyed = false
 
+    --// Apply the type color to the primary text unless one was given explicitly
     local TypeColor = Data.Type and Library.NotificationTypeColors[Data.Type]
     Data.TitleColor = Data.TitleColor or "AccentColor"
     Data.IconColor = Data.IconColor or "AccentColor"
-
     if TypeColor and not Data.Title then
         Data.DescriptionColor = Data.DescriptionColor or TypeColor
     end
@@ -13566,6 +13728,7 @@ function Library:Notify(...)
         ZIndex = 5,
         Parent = FakeBackground,
     })
+    Library:RegisterBackgroundTarget(Holder)
     table.insert(
         Library.Corners,
         New("UICorner", {
@@ -13645,7 +13808,7 @@ function Library:Notify(...)
                 AnchorPoint = Vector2.new(0, 0.5),
                 Position = UDim2.new(0, 0, 0.5, 1),
                 Size = UDim2.fromOffset(15, 15),
-                ImageColor3 = Data.IconColor or "AccentColor",
+                ImageColor3 = Data.IconColor or "FontColor",
                 Parent = TitleContainer,
             })
             Library:ApplyLucideIcon(IconLabel, ParsedIcon)
@@ -13667,7 +13830,7 @@ function Library:Notify(...)
             Position = UDim2.new(0, (Data.Icon and 21 or 0), 0.5, 0),
             Size = UDim2.fromScale(0, 0),
             Text = Data.Title,
-            TextColor3 = Data.TitleColor or "AccentColor",
+            TextColor3 = Data.TitleColor or "FontColor",
             TextSize = 15,
             TextXAlignment = Enum.TextXAlignment.Left,
             TextYAlignment = Enum.TextYAlignment.Center,
@@ -14355,6 +14518,8 @@ function Library:_BuildNotificationHistory()
     )
     Library:AddOutline(Holder)
 
+    Library:RegisterBackgroundTarget(Holder)
+
     local TitleLabel = New("TextLabel", {
         BackgroundTransparency = 1,
         Size = UDim2.new(1, 0, 0, 34),
@@ -14805,6 +14970,7 @@ function Library:CreateWindow(WindowInfo)
     Library.CornerRadius = WindowInfo.CornerRadius
     Library:SetNotifySide(WindowInfo.NotifySide)
     Library.ShowCustomCursor = WindowInfo.ShowCustomCursor
+    Library.Scheme.BackgroundImage = WindowInfo.BackgroundImage or ""
     Library.Scheme.Font = WindowInfo.Font
     Library.ToggleKeybind = WindowInfo.ToggleKeybind
     Library.GlobalSearch = WindowInfo.GlobalSearch
@@ -14910,6 +15076,7 @@ function Library:CreateWindow(WindowInfo)
                 Parent = MainFrame,
             })
         )
+        Library:RegisterBackgroundTarget(MainFrame)
         table.insert(
             Library.Scales,
             New("UIScale", {
@@ -14930,37 +15097,8 @@ function Library:CreateWindow(WindowInfo)
             ZIndex = 2
         })
 
-        local BackgroundIcon
-        pcall(function()
-            BackgroundIcon = Library:GetCustomIcon(WindowInfo.BackgroundImage)
-        end)
-
-        HasBackgroundImage = BackgroundIcon ~= nil
-        BackgroundImage = New("ImageLabel", {
-            Active = false,
-            Position = UDim2.fromScale(0, 0),
-            Size = UDim2.fromScale(1, 1),
-            ScaleType = Enum.ScaleType.Stretch,
-            ZIndex = -1,
-            BackgroundTransparency = 1,
-            ImageTransparency = 0.8,
-            Visible = HasBackgroundImage,
-            Parent = MainFrame,
-        })
-
-        if BackgroundIcon then
-            pcall(function()
-                Library:ApplyLucideIcon(BackgroundImage, BackgroundIcon)
-            end)
-        end
-
-        table.insert(
-            Library.Corners,
-            New("UICorner", {
-                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                Parent = BackgroundImage,
-            })
-        )
+        BackgroundImage = nil
+        HasBackgroundImage = false
 
         --// Background Video (medium-high risk)
         local function ResolveVideoId(Video)
@@ -15105,9 +15243,9 @@ function Library:CreateWindow(WindowInfo)
             AutomaticSize = Enum.AutomaticSize.X,
             BackgroundTransparency = 1,
             Size = UDim2.fromOffset(0, 20),
-            Visible = not IsCompact,
             Parent = TitleHolder,
         })
+        TagsHolder.Visible = not IsCompact
         New("UIListLayout", {
             FillDirection = Enum.FillDirection.Horizontal,
             VerticalAlignment = Enum.VerticalAlignment.Center,
@@ -15356,6 +15494,7 @@ function Library:CreateWindow(WindowInfo)
                 Visible = false,
                 Parent = ScreenGui,
             })
+            Library:RegisterBackgroundTarget(MiniFrame)
             table.insert(
                 Library.Corners,
                 New("UICorner", {
@@ -16088,7 +16227,6 @@ function Library:CreateWindow(WindowInfo)
             TextColor3 = FgColor,
             TextSize = TextSize,
             AutoButtonColor = false,
-            Visible = not IsCompact,
             Parent = TagsHolder,
         })
         New("UIPadding", {
@@ -16166,9 +16304,9 @@ function Library:CreateWindow(WindowInfo)
         AvatarHolder = nil,
         Info = nil,
         LogoutButton = nil,
+        SetCompact = nil,
         OriginalName = "",
         NameVisible = true,
-        SetCompact = nil,
     }
 
     local function EnsureUserProfile()
@@ -16333,12 +16471,8 @@ function Library:CreateWindow(WindowInfo)
         UserProfileRefs.LogoutButton = LogoutButton
 
         UserProfileRefs.SetCompact = function(Compact)
-            if not UserProfileRefs.Holder then
-                return
-            end
-
             local Width = Compact and WindowInfo.SidebarCompactWidth or TitleHolder.Size.X.Offset
-            UserProfileRefs.Holder.Size = UDim2.new(0, Width, 0, 56)
+            Holder.Size = UDim2.new(0, Width, 0, 56)
 
             if Compact then
                 AvatarHolder.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -16408,7 +16542,6 @@ function Library:CreateWindow(WindowInfo)
         return Window
     end
 
-    --// Compatibility alias: both spellings are supported.
     Window.AddUserProfile = Window.SetUserProfile
 
     function Window:HideUserProfile()
@@ -16421,79 +16554,8 @@ function Library:CreateWindow(WindowInfo)
     end
 
     function Window:SetBackgroundImage(Image: string | number)
-        local ValidIcon = false
-        local ResolvedImage = ""
-
-        if typeof(Image) == "number" then
-            Image = tostring(Image)
-        end
-
-        if typeof(Image) == "string" and Image ~= "" then
-            local BackgroundIcon
-            pcall(function()
-                BackgroundIcon = Library:GetCustomIcon(Image)
-            end)
-
-            if BackgroundIcon and BackgroundIcon.Url and BackgroundIcon.Url ~= "" then
-                local Applied = pcall(function()
-                    Library:ApplyLucideIcon(BackgroundImage, BackgroundIcon)
-                end)
-
-                if Applied then
-                    ValidIcon = true
-                    ResolvedImage = BackgroundIcon.Url
-                end
-            elseif Image:match("^https?://") and getcustomasset and writefile and isfile then
-                local URL = Image
-                local FileName = URL:match("/([^/?#]+)%.[^/?#]+$")
-                if FileName and FileName ~= "" then
-                    local SafeFileName = FileName:gsub("[^%w%._%-]", "_")
-                    local Extension = URL:match("%.([%w]+)(?:[?#].*)?$")
-                    if Extension then
-                        SafeFileName = SafeFileName .. "." .. Extension
-                    end
-
-                    local Downloaded = false
-                    pcall(function()
-                        if CustomImageManagerAssets[SafeFileName] == nil then
-                            CustomImageManagerAssets[SafeFileName] = {
-                                RobloxId = 0,
-                                Path = string.format("Obsidian/custom_assets/%s", SafeFileName),
-                                URL = URL,
-                                Id = nil,
-                            }
-                        end
-
-                        local AssetData = CustomImageManagerAssets[SafeFileName]
-                        local Success = CustomImageManager.DownloadAsset(SafeFileName, true)
-                        if Success and isfile(AssetData.Path) then
-                            local AssetId = CustomImageManager.GetAsset(SafeFileName)
-                            if typeof(AssetId) == "string" and AssetId ~= "" and AssetId ~= "rbxassetid://0" then
-                                BackgroundImage.Image = AssetId
-                                BackgroundImage.ImageRectOffset = Vector2.zero
-                                BackgroundImage.ImageRectSize = Vector2.zero
-                                Downloaded = true
-                            end
-                        end
-                    end)
-
-                    ValidIcon = Downloaded
-                    if Downloaded then
-                        ResolvedImage = BackgroundImage.Image
-                    end
-                end
-            end
-        end
-
-        if not ValidIcon then
-            BackgroundImage.Image = ""
-            BackgroundImage.ImageRectOffset = Vector2.zero
-            BackgroundImage.ImageRectSize = Vector2.zero
-        end
-
-        HasBackgroundImage = ValidIcon
-        BackgroundImage.Visible = ValidIcon and MainFrame.Visible
-        WindowInfo.BackgroundImage = ValidIcon and Image or ""
+        Library.Scheme.BackgroundImage = Image
+        Library:RefreshBackgroundTargets()
         return Window
     end
 
@@ -17071,7 +17133,7 @@ function Library:CreateWindow(WindowInfo)
             IsCompact = Window:GetSidebarWidth() <= WindowInfo.CompactWidthActivation
         end
 
-        --// Live flag the tooltip gate reads: sidebar hints only show when compact
+
         Library.SidebarCompacted = IsCompact
 
         WindowTitle.Visible = not IsCompact
@@ -17124,8 +17186,8 @@ function Library:CreateWindow(WindowInfo)
         return IsCompact
     end
 
-    --// Minimized is the whole window collapsing to a pill, which is a different thing
-    --// from SetCompact below: that only narrows the sidebar.
+
+
     function Window:IsMinimized()
         return Minimized
     end
@@ -18468,10 +18530,7 @@ function Library:CreateWindow(WindowInfo)
                 local ContainerSize = math.max(0, (tonumber(ContentSize) or 0) + 14)
 
                 if Groupbox.PoppedOut then
-                    ContainerSize = math.max(
-                        0,
-                        math.min(ContainerSize, GetPopOutBodyMaxHeight(Groupbox, TopSize + 1))
-                    )
+                    ContainerSize = math.max(0, math.min(ContainerSize, GetPopOutBodyMaxHeight(Groupbox, TopSize + 1)))
                 end
 
                 local BodySize = Groupbox.Collapsed and TopSize or (TopSize + 1 + ContainerSize)
