@@ -1826,17 +1826,25 @@ local BackgroundAssetCache = {}
 local BackgroundAssetPending = {}
 
 local function safeGetCustomAsset(path)
-    local getter = getcustomasset or getsynasset
-    if getter then
-        local Success, Result = pcall(getter, path)
-        if Success and type(Result) == "string" and Result ~= "" then
+    local Getter = getcustomasset
+    if typeof(Getter) == "function" then
+        local Ok, Result = pcall(Getter, path)
+        if Ok and type(Result) == "string" and Result ~= "" then
+            return Result
+        end
+    end
+
+    Getter = getsynasset
+    if typeof(Getter) == "function" then
+        local Ok, Result = pcall(Getter, path)
+        if Ok and type(Result) == "string" and Result ~= "" then
             return Result
         end
     end
 
     if syn and typeof(syn.get_custom_asset) == "function" then
-        local Success, Result = pcall(syn.get_custom_asset, path)
-        if Success and type(Result) == "string" and Result ~= "" then
+        local Ok, Result = pcall(syn.get_custom_asset, path)
+        if Ok and type(Result) == "string" and Result ~= "" then
             return Result
         end
     end
@@ -1845,55 +1853,18 @@ local function safeGetCustomAsset(path)
 end
 
 local function safeMakeFolder(path)
-    if typeof(isfolder) == "function" and isfolder(path) then
-        return
+    if typeof(isfolder) == "function" then
+        local Ok, Exists = pcall(isfolder, path)
+        if Ok and Exists then
+            return true
+        end
     end
+
     if typeof(makefolder) == "function" then
-        pcall(makefolder, path)
-    end
-end
-
-local function encodeNonAsciiUrl(Url)
-    return (Url:gsub("[\\128-\\255]", function(Byte)
-        return string.format("%%%02X", string.byte(Byte))
-    end))
-end
-
-local function safeHttpGet(Url)
-    local EncodedUrl = encodeNonAsciiUrl(Url)
-
-    local Request = request or http_request
-    if not Request and syn and typeof(syn.request) == "function" then
-        Request = syn.request
+        return pcall(makefolder, path)
     end
 
-    if typeof(Request) == "function" then
-        for _, RequestUrl in { EncodedUrl, Url } do
-            local Ok, Response = pcall(Request, {
-                Url = RequestUrl,
-                Method = "GET",
-            })
-
-            if Ok and type(Response) == "table" then
-                local Status = tonumber(Response.StatusCode)
-                local Body = Response.Body
-                if type(Body) == "string" and Body ~= "" and (not Status or (Status >= 200 and Status < 400)) then
-                    return Body
-                end
-            end
-        end
-    end
-
-    if game and typeof(game.HttpGet) == "function" then
-        for _, RequestUrl in { EncodedUrl, Url } do
-            local Ok, Body = pcall(game.HttpGet, game, RequestUrl)
-            if Ok and type(Body) == "string" and Body ~= "" then
-                return Body
-            end
-        end
-    end
-
-    return nil
+    return false
 end
 
 local function getBackgroundAsset(Value)
@@ -1932,64 +1903,55 @@ local function requestBackgroundAsset(Value)
     if typeof(Value) ~= "string" or not Value:match("^https?://") then
         return
     end
+
     if BackgroundAssetCache[Value] or BackgroundAssetPending[Value] then
+        return
+    end
+
+    if typeof(writefile) ~= "function" or typeof(game.HttpGet) ~= "function" then
         return
     end
 
     BackgroundAssetPending[Value] = true
 
     task.spawn(function()
-        local Success, Result = pcall(function()
+        local AssetId
+
+        local Ok = pcall(function()
             safeMakeFolder("Obsidian")
             safeMakeFolder("Obsidian/custom_assets")
 
-            -- Keep a real image extension. Fandom/Wikia URLs commonly contain
-            -- ".png/revision/..." rather than ending in ".png".
-            local Extension = Value:match("%.([%w]+)[/%?&]") or "png"
-            Extension = Extension:lower()
-            if #Extension > 5 then
-                Extension = "png"
-            end
+            local FilePath = "Obsidian/custom_assets/bg_" .. tostring(math.floor(tick())) .. ".png"
 
-            local Name = Value:gsub("^https?://", "")
-            Name = Name:gsub("[^%w%._-]", "_")
-            if #Name > 150 then
-                Name = Name:sub(1, 150)
-            end
-
-            local FilePath = string.format(
-                "Obsidian/custom_assets/bg_%s.%s",
-                Name,
-                Extension
-            )
-
-            if typeof(isfile) ~= "function" or not isfile(FilePath) then
-                if typeof(writefile) ~= "function" then
-                    return nil
-                end
-
-                local Data = safeHttpGet(Value)
-                if not Data then
-                    return nil
-                end
-
-                local Written = pcall(writefile, FilePath, Data)
-                if not Written then
-                    return nil
+            if typeof(isfile) == "function" then
+                local Suffix = 0
+                while isfile(FilePath) and Suffix < 20 do
+                    Suffix += 1
+                    FilePath = "Obsidian/custom_assets/bg_" .. tostring(math.floor(tick())) .. "_" .. tostring(Suffix) .. ".png"
                 end
             end
 
-            return safeGetCustomAsset(FilePath)
+            local HttpOk, Data = pcall(game.HttpGet, game, Value)
+            if not HttpOk or type(Data) ~= "string" or Data == "" then
+                return
+            end
+
+            local WriteOk = pcall(writefile, FilePath, Data)
+            if not WriteOk then
+                return
+            end
+
+            AssetId = safeGetCustomAsset(FilePath)
         end)
-
-        if Success and type(Result) == "string" and Result ~= "" then
-            BackgroundAssetCache[Value] = Result
-        end
 
         BackgroundAssetPending[Value] = nil
 
+        if Ok and AssetId then
+            BackgroundAssetCache[Value] = AssetId
+        end
+
         if Library.Scheme.BackgroundImage == Value then
-            pcall(Library.RefreshBackgroundTargets, Library)
+            Library:RefreshBackgroundTargets()
         end
     end)
 end
@@ -2002,39 +1964,35 @@ local function applyBackgroundTarget(Target, Asset)
 
     local Existing = Target:FindFirstChild("CustomBackground")
     if Existing then
-        Existing:Destroy()
+        pcall(Existing.Destroy, Existing)
     end
 
     if not Asset then
         return
     end
 
-    -- The actual Image assignment is protected as well. This matters for
-    -- executors that return a bad custom-asset URI even after getcustomasset.
-    local Success = pcall(function()
-        local Background = New("ImageLabel", {
-            Name = "CustomBackground",
-            Active = false,
-            BackgroundTransparency = 1,
-            Image = Asset,
-            ImageTransparency = 0.8,
-            Position = UDim2.fromScale(0, 0),
-            ScaleType = Enum.ScaleType.Stretch,
-            Size = UDim2.fromScale(1, 1),
-            ZIndex = math.max(0, Target.ZIndex - 1),
-            Parent = Target,
-        })
+    local Ok, Background = pcall(function()
+        local Bg = Instance.new("ImageLabel")
+        Bg.Name = "CustomBackground"
+        Bg.Position = UDim2.fromScale(0, 0)
+        Bg.Size = UDim2.fromScale(1, 1)
+        Bg.ScaleType = Enum.ScaleType.Stretch
+        Bg.ZIndex = 999
+        Bg.BackgroundTransparency = 1
+        Bg.ImageTransparency = 0.8
 
-        local Corner = Target:FindFirstChildOfClass("UICorner")
-        if Corner then
-            New("UICorner", {
-                CornerRadius = Corner.CornerRadius,
-                Parent = Background,
-            })
-        end
+        Bg.Image = Asset
+
+        local ExistingCorner = Target:FindFirstChildOfClass("UICorner")
+        local Corner = Instance.new("UICorner")
+        Corner.CornerRadius = ExistingCorner and ExistingCorner.CornerRadius or UDim.new(0, 10)
+        Corner.Parent = Bg
+
+        Bg.Parent = Target
+        return Bg
     end)
 
-    if not Success then
+    if not Ok or not Background then
         return
     end
 end
@@ -2045,11 +2003,12 @@ function Library:RegisterBackgroundTarget(Target)
     end
 
     BackgroundTargets[Target] = true
+
     local Value = Library.Scheme.BackgroundImage
     local Asset = getBackgroundAsset(Value)
 
     if Asset then
-        pcall(applyBackgroundTarget, Target, Asset)
+        applyBackgroundTarget(Target, Asset)
     elseif typeof(Value) == "string" and Value:match("^https?://") then
         requestBackgroundAsset(Value)
     end
@@ -14659,6 +14618,62 @@ function Library:_BuildNotificationHistory()
         Size = UDim2.new(1, 0, 0, 1),
     })
 
+    --// Notification history search
+    local SearchBox = New("TextBox", {
+        BackgroundColor3 = "MainColor",
+        PlaceholderText = "Search notifications...",
+        Position = UDim2.fromOffset(8, 42),
+        Size = UDim2.new(1, -16, 0, 26),
+        Text = Library.NotificationHistorySearch or "",
+        TextSize = 14,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = Holder,
+    })
+    table.insert(
+        Library.PillCorners,
+        New("UICorner", {
+            CornerRadius = Library.CornerRadius > 0 and UDim.new(1, 0) or UDim.new(0, 0),
+            Parent = SearchBox,
+        })
+    )
+    New("UIPadding", {
+        PaddingLeft = UDim.new(0, 30),
+        PaddingRight = UDim.new(0, 12),
+        Parent = SearchBox,
+    })
+    local SearchBoxStroke = New("UIStroke", {
+        Color = "OutlineColor",
+        Parent = SearchBox,
+    })
+
+    local NotifSearchIcon = Library:GetIcon("search")
+    if NotifSearchIcon then
+        local SearchIconImage = New("ImageLabel", {
+            AnchorPoint = Vector2.new(0, 0.5),
+            ImageColor3 = "FontColor",
+            ImageTransparency = 0.5,
+            Position = UDim2.new(0, -20, 0.5, 0),
+            Size = UDim2.fromOffset(14, 14),
+            Parent = SearchBox,
+        })
+        Library:ApplyLucideIcon(SearchIconImage, NotifSearchIcon)
+    end
+
+    Library:GiveSignal(SearchBox.Focused:Connect(function()
+        Library.Registry[SearchBoxStroke].Color = "AccentColor"
+        TweenService:Create(SearchBoxStroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor }):Play()
+    end))
+    Library:GiveSignal(SearchBox.FocusLost:Connect(function()
+        Library.Registry[SearchBoxStroke].Color = "OutlineColor"
+        TweenService:Create(SearchBoxStroke, Library.TweenInfo, { Color = Library.Scheme.OutlineColor }):Play()
+    end))
+    Library:GiveSignal(SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+        Library.NotificationHistorySearch = SearchBox.Text
+        Library:RefreshNotificationHistory()
+    end))
+
+    Library.NotificationHistorySearchBox = SearchBox
+
     --// Close (X) button in the title bar
     local CloseIcon = Library:GetIcon("x")
     local CloseButton = New("TextButton", {
@@ -14711,10 +14726,10 @@ function Library:_BuildNotificationHistory()
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         CanvasSize = UDim2.fromScale(0, 0),
-        Position = UDim2.fromOffset(0, 35),
+        Position = UDim2.fromOffset(0, 76),
         ScrollBarThickness = 4,
         ScrollBarImageColor3 = "AccentColor",
-        Size = UDim2.new(1, 0, 1, -35),
+        Size = UDim2.new(1, 0, 1, -76),
         Parent = Holder,
     })
     New("UIListLayout", {
@@ -14766,17 +14781,42 @@ function Library:RefreshNotificationHistory()
     Library:_BuildNotificationHistory()
 
     local Scroller = Library.NotificationHistoryContainer
+    if not Scroller or not Scroller.Parent then
+        return
+    end
+
+    local SearchBox = Library.NotificationHistorySearchBox
+    if SearchBox and SearchBox.Parent and SearchBox.Text ~= (Library.NotificationHistorySearch or "") then
+        SearchBox.Text = Library.NotificationHistorySearch or ""
+    end
+
     for _, Child in Scroller:GetChildren() do
         if not (Child:IsA("UIListLayout") or Child:IsA("UIPadding")) then
             Child:Destroy()
         end
     end
 
-    if #Library.NotificationHistory == 0 then
+    local Search = NormalizeSearch((Library.NotificationHistorySearch or ""):lower())
+    local Filtered = {}
+
+    if Search == "" then
+        Filtered = Library.NotificationHistory
+    else
+        for _, Entry in Library.NotificationHistory do
+            if TryFuzzyMatch(tostring(Entry.Title or ""), Search)
+                or TryFuzzyMatch(tostring(Entry.Description or ""), Search)
+                or TryFuzzyMatch(tostring(Entry.Type or ""), Search)
+            then
+                table.insert(Filtered, Entry)
+            end
+        end
+    end
+
+    if #Filtered == 0 then
         New("TextLabel", {
             BackgroundTransparency = 1,
             Size = UDim2.new(1, 0, 0, 24),
-            Text = "No notifications yet.",
+            Text = Search == "" and "No notifications yet." or "No matching notifications.",
             TextColor3 = "FontColor",
             TextTransparency = 0.4,
             TextSize = 14,
@@ -14795,7 +14835,7 @@ function Library:RefreshNotificationHistory()
     local RenderLimit = tonumber(Library.NotificationHistoryRenderLimit) or 30
     local Rendered = 0
 
-    for _, Entry in Library.NotificationHistory do
+    for _, Entry in Filtered do
         if Rendered >= RenderLimit then
             break
         end
@@ -15000,11 +15040,11 @@ function Library:RefreshNotificationHistory()
             })
         end
     end
-    if Rendered < #Library.NotificationHistory then
+    if Rendered < #Filtered then
         New("TextLabel", {
             BackgroundTransparency = 1,
             Size = UDim2.new(1, 0, 0, 20),
-            Text = string.format("+%d more", #Library.NotificationHistory - Rendered),
+            Text = string.format("+%d more", #Filtered - Rendered),
             TextColor3 = "FontColor",
             TextTransparency = 0.5,
             TextSize = 12,
