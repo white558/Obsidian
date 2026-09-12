@@ -15033,6 +15033,7 @@ function Library:CreateWindow(WindowInfo)
             WindowIcon = New("ImageLabel", {
                 Size = WindowInfo.IconSize,
                 Parent = TitleHolder,
+                ImageColor3 = "AccentColor"
             })
             if Icon then
                 Library:ApplyLucideIcon(WindowIcon, Icon)
