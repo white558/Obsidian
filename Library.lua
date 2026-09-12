@@ -1694,7 +1694,9 @@ local function FillInstance(Table: { [string]: any }, Instance: GuiObject)
             end
         end
 
-        Instance[key] = value
+        pcall(function()
+            Instance[key] = value
+        end)
     end
 
     if GetTableSize(ThemeProperties) > 0 then
