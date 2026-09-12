@@ -14768,7 +14768,58 @@ function Library:_CreateNotificationHistoryCard(Entry)
 
     local Scroller = Library.NotificationHistoryContainer
     local SuccessColor = Library.NotificationTypeColors.Success or Color3.fromRGB(96, 216, 118)
-    local Clipboard = (setclipboard or (typeof(toclipboard) == "function" and toclipboard) or (typeof(writeclipboard) == "function" and writeclipboard))
+
+    local Card = New("TextButton", {
+        BackgroundColor3 = "MainColor",
+        BackgroundTransparency = 0.9,
+        Size = UDim2.new(1, 0, 0, 48),
+        AutoButtonColor = false,
+        Parent = Scroller,
+    })
+    New("UICorner", {
+        CornerRadius = UDim.new(0, 6),
+        Parent = Card,
+    })
+
+    local Title = New("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 12, 0, 4),
+        Size = UDim2.new(1, -24, 0, 16),
+        Text = Entry.Title or "",
+        TextColor3 = "FontColor",
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        Parent = Card,
+    })
+
+    local Desc = New("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 12, 0, 24),
+        Size = UDim2.new(1, -24, 0, 16),
+        Text = Entry.Description or "",
+        TextColor3 = "FontColor",
+        TextSize = 11,
+        TextTransparency = 0.5,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        Parent = Card,
+    })
+
+    local Time = New("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(1, -40, 0, 4),
+        Size = UDim2.fromOffset(36, 16),
+        Text = Entry.TimeString or "",
+        TextColor3 = "FontColor",
+        TextSize = 11,
+        TextXAlignment = Enum.TextXAlignment.Right,
+        Parent = Card,
+    })
+
+    Library:GiveSignal(Card.MouseButton1Click:Connect(function()
+        Library:ToggleNotificationHistory()
+    end))
 
     return Card
 end
