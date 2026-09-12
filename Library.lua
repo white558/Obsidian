@@ -638,7 +638,7 @@ local Templates = {
         MaxVisibleDropdownItems = 8,
 
         --// Built in "Select All" / "Deselect All" row, multi dropdowns only
-        SelectAllButtons = true,
+        SelectAllButtons = false,
 
         --// Opens the values in a large panel over the window
         Expandable = true,
