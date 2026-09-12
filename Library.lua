@@ -7116,7 +7116,9 @@ do
             TableObj:SetRows(Info.Rows)
         end
 
-        Groupbox:Resize()
+        pcall(function()
+            Groupbox:Resize()
+        end)
         table.insert(Groupbox.Elements, TableObj)
 
         if Idx then
