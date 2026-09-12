@@ -1825,6 +1825,9 @@ local BackgroundTargets = {}
 local BackgroundAssetCache = {}
 local BackgroundAssetPending = {}
 
+--// Custom background deliberately follows the simple executor path that
+--// actually works reliably: download -> writefile -> getcustomasset ->
+--// Instance.new(ImageLabel) -> assign Image directly.
 local function safeGetCustomAsset(path)
     local Getter = getcustomasset
     if typeof(Getter) == "function" then
@@ -1977,7 +1980,8 @@ local function applyBackgroundTarget(Target, Asset)
         Bg.Position = UDim2.fromScale(0, 0)
         Bg.Size = UDim2.fromScale(1, 1)
         Bg.ScaleType = Enum.ScaleType.Stretch
-        Bg.ZIndex = 999
+        Bg.ClipsDescendants = true
+        Bg.ZIndex = 0
         Bg.BackgroundTransparency = 1
         Bg.ImageTransparency = 0.8
 
@@ -3048,7 +3052,7 @@ function Library:MakeBoxPopOut(Box: any, Options: {
             Float = New("Frame", {
                 Active = true,
                 AutomaticSize = Enum.AutomaticSize.Y,
-                BackgroundTransparency = 1,
+                BackgroundTransparency = 0,
                 Position = FloatPosition or UDim2.fromOffset(
                     AbsolutePosition.X / Library.DPIScale,
                     AbsolutePosition.Y / Library.DPIScale
@@ -3057,7 +3061,10 @@ function Library:MakeBoxPopOut(Box: any, Options: {
                 ZIndex = 1,
                 Parent = Floats,
             })
-            Library:RegisterBackgroundTarget(Float)
+            -- Float is AutomaticSize.Y; a 1x1 background ImageLabel becomes part of
+            -- the automatic measurement and can make the pop-out explode in size.
+            -- Keep the float on the normal themed background instead.
+            Float.BackgroundColor3 = Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
             FloatScale = New("UIScale", {
                 Parent = Float,
             })
@@ -4089,7 +4096,7 @@ function Library:AddContextMenu(
         Menu = New("ScrollingFrame", {
             AutomaticCanvasSize = Enum.AutomaticSize.None,
             AutomaticSize = List == 1 and Enum.AutomaticSize.Y or Enum.AutomaticSize.None,
-            BackgroundColor3 = "BackgroundColor",
+            BackgroundColor3 = "MainColor",
             BottomImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
             CanvasSize = UDim2.fromOffset(0, 0),
             ScrollBarImageColor3 = "OutlineColor",
@@ -4102,7 +4109,7 @@ function Library:AddContextMenu(
         })
     else
         Menu = New("Frame", {
-            BackgroundColor3 = "BackgroundColor",
+            BackgroundColor3 = "MainColor",
             Size = typeof(Size) == "function" and Size() or Size,
             Visible = false,
             ZIndex = 1,
@@ -4410,7 +4417,6 @@ function Library:AddContextMenu(
     end
 
     table.insert(Library.ContextMenus, Table)
-    Library:RegisterBackgroundTarget(Menu)
     return Table
 end
 
@@ -13803,20 +13809,19 @@ function Library:Notify(...)
 
     local Holder = New("Frame", {
         AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundColor3 = "MainColor",
+        BackgroundColor3 = function()
+            return Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
+        end,
         Position = Library.NotifySide:lower() == "left" and UDim2.new(-1, -8, 0, -2) or UDim2.new(1, 8, 0, -2),
         Size = UDim2.fromScale(1, 1),
         ZIndex = 5,
         Parent = FakeBackground,
     })
-    Library:RegisterBackgroundTarget(Holder)
-    table.insert(
-        Library.Corners,
-        New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius),
-            Parent = Holder,
-        })
-    )
+    local NotificationCorner = New("UICorner", {
+        CornerRadius = UDim.new(0, Library.CornerRadius),
+        Parent = Holder,
+    })
+    table.insert(Library.Corners, NotificationCorner)
     New("UIListLayout", {
         Padding = UDim.new(0, 4),
         Parent = Holder,
@@ -15679,7 +15684,6 @@ function Library:CreateWindow(WindowInfo)
                 Visible = false,
                 Parent = ScreenGui,
             })
-            Library:RegisterBackgroundTarget(MiniFrame)
             table.insert(
                 Library.Corners,
                 New("UICorner", {
