@@ -1924,8 +1924,13 @@ local function requestBackgroundAsset(Value)
             safeMakeFolder("Obsidian")
             safeMakeFolder("Obsidian/custom_assets")
 
+            -- Use a short timestamp filename. Do NOT use the URL as a filename:
+            -- Fandom URLs contain ?, &, unicode and /revision/... which can
+            -- produce invalid paths in executors.
             local FilePath = "Obsidian/custom_assets/bg_" .. tostring(math.floor(tick())) .. ".png"
 
+            -- If two URLs are requested during the same second, make the name
+            -- unique without relying on URL characters.
             if typeof(isfile) == "function" then
                 local Suffix = 0
                 while isfile(FilePath) and Suffix < 20 do
@@ -3620,6 +3625,7 @@ function Library:AddDraggableMenu(Name: string)
         Position = UDim2.fromOffset(0, 34),
         Size = UDim2.new(1, 0, 0, 1),
     })
+
 
     local Label = New("TextLabel", {
         BackgroundTransparency = 1,
@@ -16332,7 +16338,9 @@ function Library:CreateWindow(WindowInfo)
         --// Tabs \\--
         Tabs = New("ScrollingFrame", {
             AutomaticCanvasSize = Enum.AutomaticSize.Y,
+            -- Let the main custom background image show through the tab area.
             BackgroundColor3 = "BackgroundColor",
+            BackgroundTransparency = 0.18,
             CanvasSize = UDim2.fromScale(0, 0),
             Position = UDim2.fromOffset(0, 49),
             ScrollBarThickness = 0,
@@ -16346,9 +16354,12 @@ function Library:CreateWindow(WindowInfo)
         --// Container \\--
         Container = New("Frame", {
             AnchorPoint = Vector2.new(1, 0),
+            -- Keep a subtle theme tint while allowing the main custom background
+            -- image to remain visible across the entire content area.
             BackgroundColor3 = function()
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
             end,
+            BackgroundTransparency = 0.18,
             ClipsDescendants = true,
             Name = "Container",
             Position = UDim2.new(1, 0, 0, 49),
