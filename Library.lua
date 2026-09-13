@@ -1988,7 +1988,7 @@ local function applyBackgroundTarget(Target, Asset)
         Bg.ClipsDescendants = true
         Bg.ZIndex = 0
         Bg.BackgroundTransparency = 1
-        Bg.ImageTransparency = 0.2
+        Bg.ImageTransparency = 0.35
 
         Bg.Image = Asset
 
@@ -16104,6 +16104,7 @@ function Library:CreateWindow(WindowInfo)
             BackgroundColor3 = function()
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 4)
             end,
+            BackgroundTransparency = 0.35,
             Position = UDim2.fromScale(0, 1),
             Size = UDim2.new(1, 0, 0, 20 + WindowInfo.CornerRadius),
             Parent = MainFrame
@@ -18123,6 +18124,8 @@ function Library:CreateWindow(WindowInfo)
                         Library.Corners,
                         New("UICorner", {
                             CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                            BackgroundTransparency = InGroupbox and 1 or 0.4,
+                            Size = UDim2.fromScale(1, 0),
                             Parent = TabboxHolder,
                         })
                     )
@@ -18580,6 +18583,7 @@ function Library:CreateWindow(WindowInfo)
             do
                 GroupboxHolder = New("Frame", {
                     BackgroundColor3 = "BackgroundColor",
+                    BackgroundTransparency = 0.4,
                     Size = UDim2.fromScale(1, 0),
                     Parent = BoxHolder,
                 })
