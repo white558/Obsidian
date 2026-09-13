@@ -263,11 +263,12 @@ local Library = {
     RotatingChevronTweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 
     Animations = {
-        ToggleWindow = false,
-        TabSwitch = false,
-        Groupbox = false,
-        Dropdown = false,
-        KeyPicker = false
+        ToggleWindow = true,
+        TabSwitch = true,
+        Groupbox = true,
+        Dropdown = true,
+        KeyPicker = true,
+        ButtonClick = true
     },
 
     --// States \\--
@@ -1718,6 +1719,25 @@ local function New(ClassName: string, Properties: { [string]: any }): any
     if Properties["Parent"] and not Properties["ZIndex"] then
         pcall(function()
             Instance.ZIndex = Properties.Parent.ZIndex
+        end)
+    end
+
+    if Instance:IsA("TextButton") or Instance:IsA("ImageButton") then
+        local ClickScale = Instance:FindFirstChild("ObsidianClickScale")
+        if not ClickScale then
+            ClickScale = Instance.new("UIScale")
+            ClickScale.Name = "ObsidianClickScale"
+            ClickScale.Scale = 1
+            ClickScale.Parent = Instance
+        end
+        Instance.Activated:Connect(function()
+            if not (Library.Animations and Library.Animations.ButtonClick) then
+                return
+            end
+            local Down = TweenService:Create(ClickScale, TweenInfo.new(0.055, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 0.965 })
+            local Up = TweenService:Create(ClickScale, TweenInfo.new(0.11, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 })
+            Down:Play()
+            Down.Completed:Once(function() Up:Play() end)
         end)
     end
 
@@ -3537,8 +3557,18 @@ function Library:AddDraggableMenu(Name: string)
     )
     Library:AddOutline(Holder)
 
+    local TitleLabel = New("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(12, 38),
+        Size = UDim2.new(1, -24, 0, 25),
+        Text = "Notification History",
+        TextSize = 15,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = Holder,
+    })
+
     Library:MakeLine(Holder, {
-        Position = UDim2.fromOffset(0, 34),
+        Position = UDim2.fromOffset(0, 68),
         Size = UDim2.new(1, 0, 0, 1),
     })
 
@@ -14523,28 +14553,14 @@ function Library:_BuildNotificationHistory()
 
     Library:RegisterBackgroundTarget(Holder)
 
-    local TitleLabel = New("TextLabel", {
-        BackgroundTransparency = 1,
-        Size = UDim2.new(0, 128, 0, 34),
-        Text = "Notification History",
-        TextSize = 15,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = Holder,
-    })
-    New("UIPadding", {
-        PaddingLeft = UDim.new(0, 12),
-        Parent = TitleLabel,
-    })
-
-    --// Search/filter field for notification history. It searches title, description, type, and time.
+    --// Search stays at the very top of the history panel so it is always the first control.
     local HistorySearchBox = New("TextBox", {
-        AnchorPoint = Vector2.new(0, 0.5),
         BackgroundColor3 = "MainColor",
         BackgroundTransparency = 0.15,
         ClearTextOnFocus = false,
-        PlaceholderText = "Search history...",
-        Position = UDim2.new(0, 136, 0.5, 0),
-        Size = UDim2.new(1, -172, 0, 24),
+        PlaceholderText = "Search notification history...",
+        Position = UDim2.fromOffset(8, 7),
+        Size = UDim2.new(1, -16, 0, 26),
         Text = Library.NotificationHistorySearchText or "",
         TextSize = 12,
         TextXAlignment = Enum.TextXAlignment.Left,
@@ -14569,8 +14585,18 @@ function Library:_BuildNotificationHistory()
         end
     end))
 
+    local TitleLabel = New("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(12, 38),
+        Size = UDim2.new(1, -24, 0, 25),
+        Text = "Notification History",
+        TextSize = 15,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = Holder,
+    })
+
     Library:MakeLine(Holder, {
-        Position = UDim2.fromOffset(0, 34),
+        Position = UDim2.fromOffset(0, 68),
         Size = UDim2.new(1, 0, 0, 1),
     })
 
@@ -14579,7 +14605,7 @@ function Library:_BuildNotificationHistory()
     local CloseButton = New("TextButton", {
         AnchorPoint = Vector2.new(1, 0.5),
         BackgroundTransparency = 1,
-        Position = UDim2.new(1, -8, 0, 17),
+        Position = UDim2.new(1, -8, 0, 49),
         Size = UDim2.fromOffset(20, 20),
         Text = CloseIcon and "" or "X",
         TextColor3 = "FontColor",
@@ -14626,10 +14652,10 @@ function Library:_BuildNotificationHistory()
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         CanvasSize = UDim2.fromScale(0, 0),
-        Position = UDim2.fromOffset(0, 35),
+        Position = UDim2.fromOffset(0, 74),
         ScrollBarThickness = 4,
         ScrollBarImageColor3 = "AccentColor",
-        Size = UDim2.new(1, 0, 1, -35),
+        Size = UDim2.new(1, 0, 1, -74),
         Parent = Holder,
     })
     New("UIListLayout", {
@@ -16971,6 +16997,8 @@ function Library:CreateWindow(WindowInfo)
         return Window
     end
 
+    --// Optional translucent GUI mode. This affects the window chrome/background
+    --// surfaces while leaving controls readable.
     function Window:SetGUITransparency(Enabled: boolean, Transparency: number?)
         TransparentGUI = Enabled == true
         WindowInfo.TransparentGUI = TransparentGUI

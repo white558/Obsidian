@@ -410,6 +410,33 @@ do
             Text = "Transparent GUI",
             Default = false,
         })
+        groupbox:AddToggle("ThemeManager_WindowGlow", {
+            Text = "Window Glow",
+            Default = false,
+        })
+        groupbox:AddToggle("ThemeManager_WindowShadow", {
+            Text = "Window Shadow",
+            Default = true,
+        })
+        groupbox:AddToggle("ThemeManager_WindowGradient", {
+            Text = "Window Gradient",
+            Default = false,
+        })
+
+        local function UpdateWindowVisuals()
+            local Window = self.Library.Window
+            if not Window then
+                return
+            end
+            Window:SetGlow(self.Library.Toggles.ThemeManager_WindowGlow.Value == true)
+            Window:SetShadow(self.Library.Toggles.ThemeManager_WindowShadow.Value == true)
+            Window:SetGradient(self.Library.Toggles.ThemeManager_WindowGradient.Value == true)
+        end
+
+        self.Library.Toggles.ThemeManager_WindowGlow:OnChanged(UpdateWindowVisuals)
+        self.Library.Toggles.ThemeManager_WindowShadow:OnChanged(UpdateWindowVisuals)
+        self.Library.Toggles.ThemeManager_WindowGradient:OnChanged(UpdateWindowVisuals)
+        task.defer(UpdateWindowVisuals)
 
         local ThemesArray = {}
         for Name, Theme in pairs(self.BuiltInThemes) do
@@ -654,8 +681,8 @@ do
                 self.Library.Window:SetGUITransparency(Value == true)
             end
         end
-        self.Library.Options.ThemeManager_TransparentGUI:OnChanged(UpdateTransparency)
-        UpdateTransparency(self.Library.Options.ThemeManager_TransparentGUI.Value)
+        self.Library.Toggles.ThemeManager_TransparentGUI:OnChanged(UpdateTransparency)
+        UpdateTransparency(self.Library.Toggles.ThemeManager_TransparentGUI.Value)
     end
 
     function ThemeManager:CreateGroupBox(tab)
