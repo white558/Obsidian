@@ -206,9 +206,6 @@ local Library = {
     --// Notification History (built-in) \\--
     NotificationHistory = {},
     NotificationHistoryLimit = 100,
-    NotificationHistoryDisplayLimit = 30,
-    NotificationHistorySearchText = "",
-    NotificationHistorySearchBox = nil,
     NotificationHistoryKeybind = Enum.KeyCode.RightAlt,
     NotificationHistoryFrame = nil,
     NotificationHistoryContainer = nil,
@@ -219,9 +216,6 @@ local Library = {
     NotificationBadges = {},
     NotificationBell = nil,
     NotificationBellMini = nil,
-    NotificationHistoryRenderLimit = 30,
-    NotificationHistorySearch = "",
-    NotificationHistorySearchBox = nil,
     --// Primary-text color per notification type; customizable by the user
     NotificationTypeColors = {
         Error = Color3.fromRGB(255, 76, 76),
@@ -341,8 +335,7 @@ local Library = {
     ImageManager = CustomImageManager,
 
     --// Misc \\--
-        GuiTransparency = 0,
-        Notify = nil, Toggle = nil
+    Notify = nil, Toggle = nil -- we love luau lsp
 }
 
 if RunService:IsStudio() then
@@ -1829,138 +1822,88 @@ local BackgroundTargets = {}
 local BackgroundAssetCache = {}
 local BackgroundAssetPending = {}
 
---// Custom background deliberately follows the simple executor path that
---// actually works reliably: download -> writefile -> getcustomasset ->
---// Instance.new(ImageLabel) -> assign Image directly.
 local function safeGetCustomAsset(path)
-    local Getter = getcustomasset
-    if typeof(Getter) == "function" then
-        local Ok, Result = pcall(Getter, path)
-        if Ok and type(Result) == "string" and Result ~= "" then
-            return Result
-        end
+    if getcustomasset then
+        local Success, Result = pcall(getcustomasset, path)
+        if Success then return Result end
+    elseif getsynasset then
+        local Success, Result = pcall(getsynasset, path)
+        if Success then return Result end
+    elseif syn and syn.get_custom_asset then
+        local Success, Result = pcall(syn.get_custom_asset, path)
+        if Success then return Result end
     end
-
-    Getter = getsynasset
-    if typeof(Getter) == "function" then
-        local Ok, Result = pcall(Getter, path)
-        if Ok and type(Result) == "string" and Result ~= "" then
-            return Result
-        end
-    end
-
-    if syn and typeof(syn.get_custom_asset) == "function" then
-        local Ok, Result = pcall(syn.get_custom_asset, path)
-        if Ok and type(Result) == "string" and Result ~= "" then
-            return Result
-        end
-    end
-
     return nil
 end
 
 local function safeMakeFolder(path)
-    if typeof(isfolder) == "function" then
-        local Ok, Exists = pcall(isfolder, path)
-        if Ok and Exists then
-            return true
-        end
+    if isfolder and not isfolder(path) then
+        pcall(makefolder, path)
+    elseif makefolder then
+        pcall(makefolder, path)
     end
-
-    if typeof(makefolder) == "function" then
-        return pcall(makefolder, path)
-    end
-
-    return false
 end
 
 local function getBackgroundAsset(Value)
     if typeof(Value) == "number" then
-        return "rbxassetid://" .. tostring(Value)
+        Value = "rbxassetid://" .. tostring(Value)
     end
 
-    if typeof(Value) ~= "string" then
+    if typeof(Value) ~= "string" or Value == "" then
         return nil
     end
 
-    Value = Value:match("^%s*(.-)%s*$")
-    if Value == "" then
-        return nil
+    if not Value:match("^https?://") then
+        return Value:match("^rbxassetid://") and Value or "rbxassetid://" .. Value
     end
 
-    if Value:match("^rbxassetid://")
-        or Value:match("^rbxasset://")
-        or Value:match("^content://")
-    then
-        return Value
-    end
-
-    if tonumber(Value) then
-        return "rbxassetid://" .. Value
-    end
-
-    if Value:match("^https?://") then
-        return BackgroundAssetCache[Value]
-    end
-
-    return nil
+    return BackgroundAssetCache[Value]
 end
 
 local function requestBackgroundAsset(Value)
     if typeof(Value) ~= "string" or not Value:match("^https?://") then
         return
     end
-
     if BackgroundAssetCache[Value] or BackgroundAssetPending[Value] then
         return
     end
 
-    if typeof(writefile) ~= "function" or typeof(game.HttpGet) ~= "function" then
-        return
-    end
-
     BackgroundAssetPending[Value] = true
-
     task.spawn(function()
         local AssetId
-
-        local Ok = pcall(function()
+        local Success, Result = pcall(function()
             safeMakeFolder("Obsidian")
             safeMakeFolder("Obsidian/custom_assets")
 
-            -- Use a short timestamp filename. Do NOT use the URL as a filename:
-            -- Fandom URLs contain ?, &, unicode and /revision/... which can
-            -- produce invalid paths in executors.
-            local FilePath = "Obsidian/custom_assets/bg_" .. tostring(math.floor(tick())) .. ".png"
+            local Name = Value:gsub("[^%w%._-]", "_")
+            if #Name > 180 then
+                Name = Name:sub(-180)
+            end
+            local FilePath = "Obsidian/custom_assets/bg_" .. Name
 
-            -- If two URLs are requested during the same second, make the name
-            -- unique without relying on URL characters.
-            if typeof(isfile) == "function" then
-                local Suffix = 0
-                while isfile(FilePath) and Suffix < 20 do
-                    Suffix += 1
-                    FilePath = "Obsidian/custom_assets/bg_" .. tostring(math.floor(tick())) .. "_" .. tostring(Suffix) .. ".png"
+            if not isfile or not isfile(FilePath) then
+                if not writefile then
+                    return nil
+                end
+                local Ok, Data = pcall(game.HttpGet, game, Value)
+                if not Ok or type(Data) ~= "string" or Data == "" then
+                    return nil
+                end
+                local Written = pcall(writefile, FilePath, Data)
+                if not Written then
+                    return nil
                 end
             end
 
-            local HttpOk, Data = pcall(game.HttpGet, game, Value)
-            if not HttpOk or type(Data) ~= "string" or Data == "" then
-                return
-            end
-
-            local WriteOk = pcall(writefile, FilePath, Data)
-            if not WriteOk then
-                return
-            end
-
-            AssetId = safeGetCustomAsset(FilePath)
+            return safeGetCustomAsset(FilePath)
         end)
 
-        BackgroundAssetPending[Value] = nil
-
-        if Ok and AssetId then
+        if Success and Result and Result ~= "" then
+            AssetId = Result
             BackgroundAssetCache[Value] = AssetId
         end
+
+        BackgroundAssetPending[Value] = nil
 
         if Library.Scheme.BackgroundImage == Value then
             Library:RefreshBackgroundTargets()
@@ -1976,37 +1919,32 @@ local function applyBackgroundTarget(Target, Asset)
 
     local Existing = Target:FindFirstChild("CustomBackground")
     if Existing then
-        pcall(Existing.Destroy, Existing)
+        Existing:Destroy()
     end
 
     if not Asset then
         return
     end
 
-    local Ok, Background = pcall(function()
-        local Bg = Instance.new("ImageLabel")
-        Bg.Name = "CustomBackground"
-        Bg.Position = UDim2.fromScale(0, 0)
-        Bg.Size = UDim2.fromScale(1, 1)
-        Bg.ScaleType = Enum.ScaleType.Crop
-        Bg.ClipsDescendants = true
-        Bg.ZIndex = 0
-        Bg.BackgroundTransparency = 1
-        Bg.ImageTransparency = 0.35
+    local Background = New("ImageLabel", {
+        Name = "CustomBackground",
+        Active = false,
+        BackgroundTransparency = 1,
+        Image = Asset,
+        ImageTransparency = 0.8,
+        Position = UDim2.fromScale(0, 0),
+        ScaleType = Enum.ScaleType.Stretch,
+        Size = UDim2.fromScale(1, 1),
+        ZIndex = math.max(0, Target.ZIndex - 1),
+        Parent = Target,
+    })
 
-        Bg.Image = Asset
-
-        local ExistingCorner = Target:FindFirstChildOfClass("UICorner")
-        local Corner = Instance.new("UICorner")
-        Corner.CornerRadius = ExistingCorner and ExistingCorner.CornerRadius or UDim.new(0, 10)
-        Corner.Parent = Bg
-
-        Bg.Parent = Target
-        return Bg
-    end)
-
-    if not Ok or not Background then
-        return
+    local Corner = Target:FindFirstChildOfClass("UICorner")
+    if Corner then
+        New("UICorner", {
+            CornerRadius = Corner.CornerRadius,
+            Parent = Background,
+        })
     end
 end
 
@@ -2016,10 +1954,8 @@ function Library:RegisterBackgroundTarget(Target)
     end
 
     BackgroundTargets[Target] = true
-
     local Value = Library.Scheme.BackgroundImage
     local Asset = getBackgroundAsset(Value)
-
     if Asset then
         applyBackgroundTarget(Target, Asset)
     elseif typeof(Value) == "string" and Value:match("^https?://") then
@@ -2030,13 +1966,12 @@ end
 function Library:RefreshBackgroundTargets()
     local Value = Library.Scheme.BackgroundImage
     local Asset = getBackgroundAsset(Value)
-
     if typeof(Value) == "string" and Value:match("^https?://") and not Asset then
         requestBackgroundAsset(Value)
     end
 
     for Target in BackgroundTargets do
-        pcall(applyBackgroundTarget, Target, Asset)
+        applyBackgroundTarget(Target, Asset)
     end
 end
 
@@ -2596,15 +2531,6 @@ function Library:MakeResizable(UI: GuiObject, DragFrame: GuiObject, Callback: ()
     local Changed
     local InputBegan
     local InputChanged
-    local RenderConnection
-    local CallbackPending = false
-
-    local function FlushCallback()
-        if Callback and CallbackPending then
-            CallbackPending = false
-            Library:SafeCallback(Callback)
-        end
-    end
 
     InputBegan = DragFrame.InputBegan:Connect(function(Input: InputObject)
         if not IsClickInput(Input) then
@@ -2614,10 +2540,6 @@ function Library:MakeResizable(UI: GuiObject, DragFrame: GuiObject, Callback: ()
         StartPos = Input.Position
         FrameSize = UI.Size
         Dragging = true
-
-        if Callback and not RenderConnection then
-            RenderConnection = Library:GiveSignal(RunService.RenderStepped:Connect(FlushCallback))
-        end
 
         Changed = Input.Changed:Connect(function()
             if Input.UserInputState ~= Enum.UserInputState.End then
@@ -2629,12 +2551,6 @@ function Library:MakeResizable(UI: GuiObject, DragFrame: GuiObject, Callback: ()
                 Changed:Disconnect()
                 Changed = nil
             end
-
-            if RenderConnection then
-                RenderConnection:Disconnect()
-                RenderConnection = nil
-            end
-            FlushCallback()
         end)
     end)
 
@@ -2644,10 +2560,6 @@ function Library:MakeResizable(UI: GuiObject, DragFrame: GuiObject, Callback: ()
             if Changed and Changed.Connected then
                 Changed:Disconnect()
                 Changed = nil
-            end
-            if RenderConnection then
-                RenderConnection:Disconnect()
-                RenderConnection = nil
             end
 
             return
@@ -2662,7 +2574,7 @@ function Library:MakeResizable(UI: GuiObject, DragFrame: GuiObject, Callback: ()
                 math.clamp(FrameSize.Y.Offset + Delta.Y, Library.MinSize.Y, math.huge)
             )
             if Callback then
-                CallbackPending = true
+                Library:SafeCallback(Callback)
             end
         end
     end)
@@ -2674,20 +2586,20 @@ function Library:MakeResizable(UI: GuiObject, DragFrame: GuiObject, Callback: ()
         if InputChanged and InputChanged.Connected then
             InputChanged:Disconnect()
         end
+
         if InputBegan and InputBegan.Connected then
             InputBegan:Disconnect()
         end
+
         if Changed and Changed.Connected then
             Changed:Disconnect()
-        end
-        if RenderConnection then
-            RenderConnection:Disconnect()
         end
 
         local IdxChanged = table.find(Library.Signals, InputChanged)
         if IdxChanged then
             table.remove(Library.Signals, IdxChanged)
         end
+
         local IdxBegan = table.find(Library.Signals, InputBegan)
         if IdxBegan then
             table.remove(Library.Signals, IdxBegan)
@@ -3061,7 +2973,7 @@ function Library:MakeBoxPopOut(Box: any, Options: {
             Float = New("Frame", {
                 Active = true,
                 AutomaticSize = Enum.AutomaticSize.Y,
-                BackgroundTransparency = 0,
+                BackgroundTransparency = 1,
                 Position = FloatPosition or UDim2.fromOffset(
                     AbsolutePosition.X / Library.DPIScale,
                     AbsolutePosition.Y / Library.DPIScale
@@ -3070,12 +2982,7 @@ function Library:MakeBoxPopOut(Box: any, Options: {
                 ZIndex = 1,
                 Parent = Floats,
             })
-            -- Float is AutomaticSize.Y; a 1x1 background ImageLabel becomes part of
-            -- the automatic measurement and can make the pop-out explode in size.
-            -- Keep the float on the normal themed background instead.
-            Float.BackgroundColor3 = Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
-            Float.BackgroundTransparency = 0
-
+            Library:RegisterBackgroundTarget(Float)
             FloatScale = New("UIScale", {
                 Parent = Float,
             })
@@ -3144,10 +3051,6 @@ function Library:MakeBoxPopOut(Box: any, Options: {
         PlaceholderHeader = nil
 
         if Float then
-            if FloatBackground then
-                FloatBackground:Destroy()
-                FloatBackground = nil
-            end
             Float:Destroy()
             Float = nil
         end
@@ -3636,7 +3539,6 @@ function Library:AddDraggableMenu(Name: string)
         Size = UDim2.new(1, 0, 0, 1),
     })
 
-
     local Label = New("TextLabel", {
         BackgroundTransparency = 1,
         Size = UDim2.new(1, 0, 0, 34),
@@ -4112,7 +4014,7 @@ function Library:AddContextMenu(
         Menu = New("ScrollingFrame", {
             AutomaticCanvasSize = Enum.AutomaticSize.None,
             AutomaticSize = List == 1 and Enum.AutomaticSize.Y or Enum.AutomaticSize.None,
-            BackgroundColor3 = "MainColor",
+            BackgroundColor3 = "BackgroundColor",
             BottomImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
             CanvasSize = UDim2.fromOffset(0, 0),
             ScrollBarImageColor3 = "OutlineColor",
@@ -4125,14 +4027,13 @@ function Library:AddContextMenu(
         })
     else
         Menu = New("Frame", {
-            BackgroundColor3 = "MainColor",
+            BackgroundColor3 = "BackgroundColor",
             Size = typeof(Size) == "function" and Size() or Size,
             Visible = false,
             ZIndex = 1,
             Parent = ParentGui,
         })
     end
-
     table.insert(
         Library.Scales,
         New("UIScale", {
@@ -4434,6 +4335,7 @@ function Library:AddContextMenu(
     end
 
     table.insert(Library.ContextMenus, Table)
+    Library:RegisterBackgroundTarget(Menu)
     return Table
 end
 
@@ -13699,23 +13601,17 @@ function Library:SetFont(FontFace)
     Library:UpdateColorsUsingRegistry()
 end
 
-function Library:SetBackgroundImage(Image: (string | number)?)
-    if Image ~= nil and typeof(Image) ~= "string" and typeof(Image) ~= "number" then
-        warn(("Library:SetBackgroundImage expected string, number or nil, got %s"):format(typeof(Image)))
-        return Library
-    end
-
-    if typeof(Image) == "string" then
-        Image = Image:match("^%s*(.-)%s*$")
-    end
-    Image = Image or ""
+function Library:SetBackgroundImage(Image: string | number)
+    assert(typeof(Image) == "string" or typeof(Image) == "number", "Expected string/number got " .. typeof(Image))
 
     Library.Scheme.BackgroundImage = Image
+    if Library.Window then
+        Library.Window:SetBackgroundImage(Image)
+    else
+        Library:RefreshBackgroundTargets()
+    end
 
-    pcall(Library.RefreshBackgroundTargets, Library)
-    pcall(Library.UpdateColorsUsingRegistry, Library)
-
-    return Library
+    Library:UpdateColorsUsingRegistry()
 end
 
 function Library:UpdateNotificationPositions(Snap: boolean?)
@@ -13826,19 +13722,20 @@ function Library:Notify(...)
 
     local Holder = New("Frame", {
         AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundColor3 = function()
-            return Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
-        end,
+        BackgroundColor3 = "MainColor",
         Position = Library.NotifySide:lower() == "left" and UDim2.new(-1, -8, 0, -2) or UDim2.new(1, 8, 0, -2),
         Size = UDim2.fromScale(1, 1),
         ZIndex = 5,
         Parent = FakeBackground,
     })
-    local NotificationCorner = New("UICorner", {
-        CornerRadius = UDim.new(0, Library.CornerRadius),
-        Parent = Holder,
-    })
-    table.insert(Library.Corners, NotificationCorner)
+    Library:RegisterBackgroundTarget(Holder)
+    table.insert(
+        Library.Corners,
+        New("UICorner", {
+            CornerRadius = UDim.new(0, Library.CornerRadius),
+            Parent = Holder,
+        })
+    )
     New("UIListLayout", {
         Padding = UDim.new(0, 4),
         Parent = Holder,
@@ -13851,7 +13748,6 @@ function Library:Notify(...)
         Parent = Holder,
     })
     Library:AddOutline(Holder)
-    Holder.BackgroundTransparency = 0
 
     local ContentContainer = New("Frame", {
         BackgroundTransparency = 1,
@@ -14034,10 +13930,6 @@ function Library:Notify(...)
 
         task.delay(Library.NotifyTweenInfo.Time, function()
             Library.Notifications[FakeBackground] = nil
-            if NotificationBackground then
-                NotificationBackground:Destroy()
-                NotificationBackground = nil
-            end
             FakeBackground:Destroy()
         end)
     end
@@ -14203,7 +14095,6 @@ function Library:CreatePopup(Info, Time)
         New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius + 2), Parent = Card })
     )
     Library:AddOutline(Card)
-    Card.BackgroundTransparency = 0
 
     local CardScale = New("UIScale", {
         Scale = 0.96,
@@ -14497,6 +14388,7 @@ end
 Library.Popup = Library.ShowPopup
 Library.AddPopup = Library.CreatePopup
 
+--// Notification History \\--
 function Library:AddNotificationToHistory(Entry)
     if typeof(Entry) ~= "table" then
         return
@@ -14546,7 +14438,7 @@ end
 
 --// The panel drops down from underneath the notification bell. The draggable
 --// system uses top-left offset coordinates, so we compute an offset for it.
-local NOTIFY_HISTORY_SIZE = Vector2.new(288, 362)
+local NOTIFY_HISTORY_SIZE = Vector2.new(288, 328)
 --// Slides up toward the bell as it fades, so it reads as retracting into it
 local NOTIFY_HISTORY_SLIDE = UDim2.fromOffset(0, -22)
 local NotifyHistoryOpenTween = TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
@@ -14625,6 +14517,7 @@ function Library:_BuildNotificationHistory()
         })
     )
     Library:AddOutline(Holder)
+
     Library:RegisterBackgroundTarget(Holder)
 
     local TitleLabel = New("TextLabel", {
@@ -14645,62 +14538,6 @@ function Library:_BuildNotificationHistory()
         Position = UDim2.fromOffset(0, 34),
         Size = UDim2.new(1, 0, 0, 1),
     })
-
-    --// Notification history search
-    local SearchBox = New("TextBox", {
-        BackgroundColor3 = "MainColor",
-        PlaceholderText = "Search notifications...",
-        Position = UDim2.fromOffset(8, 42),
-        Size = UDim2.new(1, -16, 0, 26),
-        Text = Library.NotificationHistorySearch or "",
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = Holder,
-    })
-    table.insert(
-        Library.PillCorners,
-        New("UICorner", {
-            CornerRadius = Library.CornerRadius > 0 and UDim.new(1, 0) or UDim.new(0, 0),
-            Parent = SearchBox,
-        })
-    )
-    New("UIPadding", {
-        PaddingLeft = UDim.new(0, 30),
-        PaddingRight = UDim.new(0, 12),
-        Parent = SearchBox,
-    })
-    local SearchBoxStroke = New("UIStroke", {
-        Color = "OutlineColor",
-        Parent = SearchBox,
-    })
-
-    local NotifSearchIcon = Library:GetIcon("search")
-    if NotifSearchIcon then
-        local SearchIconImage = New("ImageLabel", {
-            AnchorPoint = Vector2.new(0, 0.5),
-            ImageColor3 = "FontColor",
-            ImageTransparency = 0.5,
-            Position = UDim2.new(0, -20, 0.5, 0),
-            Size = UDim2.fromOffset(14, 14),
-            Parent = SearchBox,
-        })
-        Library:ApplyLucideIcon(SearchIconImage, NotifSearchIcon)
-    end
-
-    Library:GiveSignal(SearchBox.Focused:Connect(function()
-        Library.Registry[SearchBoxStroke].Color = "AccentColor"
-        TweenService:Create(SearchBoxStroke, Library.TweenInfo, { Color = Library.Scheme.AccentColor }):Play()
-    end))
-    Library:GiveSignal(SearchBox.FocusLost:Connect(function()
-        Library.Registry[SearchBoxStroke].Color = "OutlineColor"
-        TweenService:Create(SearchBoxStroke, Library.TweenInfo, { Color = Library.Scheme.OutlineColor }):Play()
-    end))
-    Library:GiveSignal(SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
-        Library.NotificationHistorySearch = SearchBox.Text
-        Library:RefreshNotificationHistory()
-    end))
-
-    Library.NotificationHistorySearchBox = SearchBox
 
     --// Close (X) button in the title bar
     local CloseIcon = Library:GetIcon("x")
@@ -14749,72 +14586,15 @@ function Library:_BuildNotificationHistory()
         Library:SetNotificationHistoryVisible(false)
     end)
 
-    local SearchBox = New("TextBox", {
-        BackgroundColor3 = "MainColor",
-        Position = UDim2.fromOffset(8, 42),
-        Size = UDim2.new(1, -16, 0, 26),
-        PlaceholderText = "Search notifications...",
-        Text = Library.NotificationHistorySearchText or "",
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = Holder,
-    })
-    table.insert(
-        Library.PillCorners,
-        New("UICorner", {
-            CornerRadius = Library.CornerRadius > 0 and UDim.new(1, 0) or UDim.new(0, 0),
-            Parent = SearchBox,
-        })
-    )
-    New("UIPadding", {
-        PaddingLeft = UDim.new(0, 28),
-        PaddingRight = UDim.new(0, 10),
-        Parent = SearchBox,
-    })
-    New("UIStroke", { Color = "OutlineColor", Parent = SearchBox })
-
-    local NotifySearchIcon = Library:GetIcon("search")
-    if NotifySearchIcon then
-        local NotifySearchIconImage = New("ImageLabel", {
-            AnchorPoint = Vector2.new(0, 0.5),
-            BackgroundTransparency = 1,
-            ImageColor3 = "FontColor",
-            ImageTransparency = 0.5,
-            Position = UDim2.new(0, -18, 0.5, 0),
-            Size = UDim2.fromOffset(13, 13),
-            Parent = SearchBox,
-        })
-        Library:ApplyLucideIcon(NotifySearchIconImage, NotifySearchIcon)
-    end
-
-    Library:GiveSignal(SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
-        Library.NotificationHistorySearchText = SearchBox.Text
-        Library:RefreshNotificationHistory()
-    end))
-
-    Library.NotificationHistorySearchBox = SearchBox
-
     local Scroller = New("ScrollingFrame", {
         AutomaticCanvasSize = Enum.AutomaticSize.Y,
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         CanvasSize = UDim2.fromScale(0, 0),
-        Position = UDim2.fromOffset(0, 35 + 34),
+        Position = UDim2.fromOffset(0, 35),
         ScrollBarThickness = 4,
         ScrollBarImageColor3 = "AccentColor",
-        Size = UDim2.new(1, 0, 1, -(35 + 34)),
-        Parent = Holder,
-    })
-
-    local Scroller = New("ScrollingFrame", {
-        AutomaticCanvasSize = Enum.AutomaticSize.Y,
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        CanvasSize = UDim2.fromScale(0, 0),
-        Position = UDim2.fromOffset(0, 76),
-        ScrollBarThickness = 4,
-        ScrollBarImageColor3 = "AccentColor",
-        Size = UDim2.new(1, 0, 1, -76),
+        Size = UDim2.new(1, 0, 1, -35),
         Parent = Holder,
     })
     New("UIListLayout", {
@@ -14872,28 +14652,11 @@ function Library:RefreshNotificationHistory()
         end
     end
 
-    local Search = NormalizeSearch((Library.NotificationHistorySearchText or ""):lower())
-    local DisplayLimit = tonumber(Library.NotificationHistoryDisplayLimit) or 30
-
-    local VisibleEntries = {}
-    for _, Entry in Library.NotificationHistory do
-        local Matches = Search == ""
-            or TryFuzzyMatch(Entry.Title, Search)
-            or TryFuzzyMatch(Entry.Description, Search)
-
-        if Matches then
-            table.insert(VisibleEntries, Entry)
-            if #VisibleEntries >= DisplayLimit then
-                break
-            end
-        end
-    end
-
-    if #VisibleEntries == 0 then
+    if #Library.NotificationHistory == 0 then
         New("TextLabel", {
             BackgroundTransparency = 1,
             Size = UDim2.new(1, 0, 0, 24),
-            Text = Search == "" and "No notifications yet." or "No matching notifications.",
+            Text = "No notifications yet.",
             TextColor3 = "FontColor",
             TextTransparency = 0.4,
             TextSize = 14,
@@ -14909,15 +14672,7 @@ function Library:RefreshNotificationHistory()
     local SuccessColor = Library.NotificationTypeColors.Success or Color3.fromRGB(96, 216, 118)
     local Clipboard = (setclipboard or (typeof(toclipboard) == "function" and toclipboard) or (typeof(writeclipboard) == "function" and writeclipboard))
 
-    local RenderLimit = tonumber(Library.NotificationHistoryRenderLimit) or 30
-    local Rendered = 0
-
-    for _, Entry in VisibleEntries do
-        if Rendered >= RenderLimit then
-            break
-        end
-        Rendered += 1
-
+    for _, Entry in Library.NotificationHistory do
         local Card = New("TextButton", {
             AutomaticSize = Enum.AutomaticSize.Y,
             AutoButtonColor = false,
@@ -15117,28 +14872,12 @@ function Library:RefreshNotificationHistory()
             })
         end
     end
-    if Rendered < #Filtered then
-        New("TextLabel", {
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 20),
-            Text = string.format("+%d more", #Filtered - Rendered),
-            TextColor3 = "FontColor",
-            TextTransparency = 0.5,
-            TextSize = 12,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            Parent = Scroller,
-        })
-    end
 end
 
 function Library:SetNotificationHistoryVisible(Visible: boolean)
     Library:_BuildNotificationHistory()
 
     local Frame = Library.NotificationHistoryFrame
-    if not Frame or not Frame.Parent then
-        return
-    end
-
     Visible = Visible and true or false
 
     if Library.NotificationHistoryOpen == Visible then
@@ -15187,7 +14926,6 @@ function Library:ToggleNotificationHistory()
     Library:_BuildNotificationHistory()
     Library:SetNotificationHistoryVisible(not Library.NotificationHistoryOpen)
 end
-
 
 function Library:CreateWindow(WindowInfo)
     WindowInfo = Library:Validate(WindowInfo, Templates.Window)
@@ -15331,7 +15069,6 @@ function Library:CreateWindow(WindowInfo)
         })
         --// Elements defined outside CreateWindow need this to overlay the window
         Library.MainFrame = MainFrame
-        MainFrame.BackgroundTransparency = 0.22
         table.insert(
             Library.Corners,
             New("UICorner", {
@@ -15757,6 +15494,7 @@ function Library:CreateWindow(WindowInfo)
                 Visible = false,
                 Parent = ScreenGui,
             })
+            Library:RegisterBackgroundTarget(MiniFrame)
             table.insert(
                 Library.Corners,
                 New("UICorner", {
@@ -16157,7 +15895,6 @@ function Library:CreateWindow(WindowInfo)
             BackgroundColor3 = function()
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 4)
             end,
-            BackgroundTransparency = 0.35,
             Position = UDim2.fromScale(0, 1),
             Size = UDim2.new(1, 0, 0, 20 + WindowInfo.CornerRadius),
             Parent = MainFrame
@@ -16379,15 +16116,8 @@ function Library:CreateWindow(WindowInfo)
             })
 
             Library:MakeResizable(MainFrame, ResizeButton, function()
-                local ActiveTab = Library.ActiveTab
-                if ActiveTab and ActiveTab.Resize then
-                    ActiveTab:Resize(true)
-                end
-
                 for _, Tab in Library.Tabs do
-                    if Tab ~= ActiveTab then
-                        Tab.PendingResize = true
-                    end
+                    Tab:Resize(true)
                 end
             end)
         end
@@ -16406,9 +16136,7 @@ function Library:CreateWindow(WindowInfo)
         --// Tabs \\--
         Tabs = New("ScrollingFrame", {
             AutomaticCanvasSize = Enum.AutomaticSize.Y,
-            -- Let the main custom background image show through the tab area.
             BackgroundColor3 = "BackgroundColor",
-            BackgroundTransparency = 0.42,
             CanvasSize = UDim2.fromScale(0, 0),
             Position = UDim2.fromOffset(0, 49),
             ScrollBarThickness = 0,
@@ -16422,12 +16150,9 @@ function Library:CreateWindow(WindowInfo)
         --// Container \\--
         Container = New("Frame", {
             AnchorPoint = Vector2.new(1, 0),
-            -- Keep a subtle theme tint while allowing the main custom background
-            -- image to remain visible across the entire content area.
             BackgroundColor3 = function()
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
             end,
-            BackgroundTransparency = 0.42,
             ClipsDescendants = true,
             Name = "Container",
             Position = UDim2.new(1, 0, 0, 49),
@@ -16828,18 +16553,9 @@ function Library:CreateWindow(WindowInfo)
         return Window
     end
 
-    function Window:SetBackgroundImage(Image: (string | number)?)
-        if Image ~= nil and typeof(Image) ~= "string" and typeof(Image) ~= "number" then
-            warn(("Window:SetBackgroundImage expected string, number or nil, got %s"):format(typeof(Image)))
-            return Window
-        end
-
-        if typeof(Image) == "string" then
-            Image = Image:match("^%s*(.-)%s*$")
-        end
-
-        Library.Scheme.BackgroundImage = Image or ""
-        pcall(Library.RefreshBackgroundTargets, Library)
+    function Window:SetBackgroundImage(Image: string | number)
+        Library.Scheme.BackgroundImage = Image
+        Library:RefreshBackgroundTargets()
         return Window
     end
 
@@ -17178,21 +16894,15 @@ function Library:CreateWindow(WindowInfo)
 
         if not GradientFrame then
             GradientFrame = New("Frame", {
-                Active = false,
                 BackgroundColor3 = Color3.new(1, 1, 1),
                 BackgroundTransparency = 0,
                 BorderSizePixel = 0,
                 Size = UDim2.fromScale(1, 1),
-                ZIndex = 90,
+                ZIndex = 0,
                 Parent = MainFrame,
             })
-            table.insert(
-                Library.Corners,
-                New("UICorner", {
-                    CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                    Parent = GradientFrame,
-                })
-            )
+            -- Put behind content
+            GradientFrame.ZIndex = 0
             local Gradient = New("UIGradient", {
                 Parent = GradientFrame,
             })
@@ -18183,8 +17893,6 @@ function Library:CreateWindow(WindowInfo)
                         Library.Corners,
                         New("UICorner", {
                             CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
-                            BackgroundTransparency = InGroupbox and 1 or 0.4,
-                            Size = UDim2.fromScale(1, 0),
                             Parent = TabboxHolder,
                         })
                     )
@@ -18642,7 +18350,6 @@ function Library:CreateWindow(WindowInfo)
             do
                 GroupboxHolder = New("Frame", {
                     BackgroundColor3 = "BackgroundColor",
-                    BackgroundTransparency = 0.4,
                     Size = UDim2.fromScale(1, 0),
                     Parent = BoxHolder,
                 })
@@ -20103,12 +19810,7 @@ function Library:CreateWindow(WindowInfo)
             end
 
             Library:PlayTabAnimation(TabCanvas, true)
-            if Tab.PendingResize then
-                Tab.PendingResize = false
-                Tab:Resize(true)
-            else
-                Tab:RefreshSides()
-            end
+            Tab:RefreshSides()
 
             Library.ActiveTab = Tab
 
@@ -21205,14 +20907,6 @@ function Library:CreateWindow(WindowInfo)
 
     function Library:Toggle(Value: boolean?)
         return Window:Toggle(Value)
-    end
-
-    function Library:SetGlow(Enabled: boolean, Options: { [string]: any }?)
-        return Window:SetGlow(Enabled, Options)
-    end
-
-    function Library:SetGradient(Enabled: boolean, GradientInfo: { [string]: any }?)
-        return Window:SetGradient(Enabled, GradientInfo)
     end
 
     if WindowInfo.Minimizable and WindowInfo.MinimizeKeybind then
