@@ -1709,28 +1709,28 @@ local function FillInstance(Table: { [string]: any }, Instance: GuiObject)
 end
 
 local function New(ClassName: string, Properties: { [string]: any }): any
-    local Instance = Instance.new(ClassName)
+    local InstanceGG = Instance.new(ClassName)
 
     if Templates[ClassName] then
-        FillInstance(Templates[ClassName], Instance)
+        FillInstance(Templates[ClassName], InstanceGG)
     end
-    FillInstance(Properties, Instance)
+    FillInstance(Properties, InstanceGG)
 
     if Properties["Parent"] and not Properties["ZIndex"] then
         pcall(function()
-            Instance.ZIndex = Properties.Parent.ZIndex
+            InstanceGG.ZIndex = Properties.Parent.ZIndex
         end)
     end
 
-    if Instance:IsA("TextButton") or Instance:IsA("ImageButton") then
-        local ClickScale = Instance:FindFirstChild("ObsidianClickScale")
+    if InstanceGG:IsA("TextButton") or InstanceGG:IsA("ImageButton") then
+        local ClickScale = InstanceGG:FindFirstChild("ObsidianClickScale")
         if not ClickScale then
             ClickScale = Instance.new("UIScale")
             ClickScale.Name = "ObsidianClickScale"
             ClickScale.Scale = 1
-            ClickScale.Parent = Instance
+            ClickScale.Parent = InstanceGG
         end
-        Instance.Activated:Connect(function()
+        InstanceGG.Activated:Connect(function()
             if not (Library.Animations and Library.Animations.ButtonClick) then
                 return
             end
@@ -1741,7 +1741,7 @@ local function New(ClassName: string, Properties: { [string]: any }): any
         end)
     end
 
-    return Instance
+    return InstanceGG
 end
 
 --// Main Instances \\-
