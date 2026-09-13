@@ -402,10 +402,29 @@ do
         groupbox:AddLabel("Accent Color"):AddColorPicker("AccentColor", { Default = self.Library.Scheme.AccentColor })
         groupbox:AddLabel("Outline Color"):AddColorPicker("OutlineColor", { Default = self.Library.Scheme.OutlineColor })
         groupbox:AddLabel("Font Color"):AddColorPicker("FontColor", { Default = self.Library.Scheme.FontColor })
-        --groupbox:AddToggle("BackgroundImageEnabled", { Text = "Background Image", Default = self.Library.Scheme.BackgroundImageEnabled })
-        --groupbox:AddInput("BackgroundImage", { Text = "Background Image:", Default = ""})
-        --groupbox:AddToggle("WindowGlow", { Text = "Window Glow",  Default = self.Library.Scheme.WindowGlow })
         groupbox:AddDropdown("FontFace", { Text = "Font Face:", Default = "Code", Values = self.Fonts })
+
+        groupbox:AddDivider()
+
+        groupbox:AddToggle("ThemeManager_WindowGlow", {
+            Text = "Window Glow",
+            Default = false,
+            Callback = function(Value)
+                if self.Library.SetGlow then
+                    self.Library:SetGlow(Value)
+                end
+            end,
+        })
+
+        groupbox:AddToggle("ThemeManager_WindowGradient", {
+            Text = "Window Gradient",
+            Default = false,
+            Callback = function(Value)
+                if self.Library.SetGradient then
+                    self.Library:SetGradient(Value)
+                end
+            end,
+        })
 
         local ThemesArray = {}
         for Name, Theme in pairs(self.BuiltInThemes) do

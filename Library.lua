@@ -206,6 +206,9 @@ local Library = {
     --// Notification History (built-in) \\--
     NotificationHistory = {},
     NotificationHistoryLimit = 100,
+    NotificationHistoryDisplayLimit = 30,
+    NotificationHistorySearchText = "",
+    NotificationHistorySearchBox = nil,
     NotificationHistoryKeybind = Enum.KeyCode.RightAlt,
     NotificationHistoryFrame = nil,
     NotificationHistoryContainer = nil,
@@ -338,7 +341,8 @@ local Library = {
     ImageManager = CustomImageManager,
 
     --// Misc \\--
-    Notify = nil, Toggle = nil -- we love luau lsp
+        GuiTransparency = 0,
+        Notify = nil, Toggle = nil
 }
 
 if RunService:IsStudio() then
@@ -14542,7 +14546,7 @@ end
 
 --// The panel drops down from underneath the notification bell. The draggable
 --// system uses top-left offset coordinates, so we compute an offset for it.
-local NOTIFY_HISTORY_SIZE = Vector2.new(288, 328)
+local NOTIFY_HISTORY_SIZE = Vector2.new(288, 362)
 --// Slides up toward the bell as it fades, so it reads as retracting into it
 local NOTIFY_HISTORY_SLIDE = UDim2.fromOffset(0, -22)
 local NotifyHistoryOpenTween = TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
@@ -14745,6 +14749,63 @@ function Library:_BuildNotificationHistory()
         Library:SetNotificationHistoryVisible(false)
     end)
 
+    local SearchBox = New("TextBox", {
+        BackgroundColor3 = "MainColor",
+        Position = UDim2.fromOffset(8, 42),
+        Size = UDim2.new(1, -16, 0, 26),
+        PlaceholderText = "Search notifications...",
+        Text = Library.NotificationHistorySearchText or "",
+        TextSize = 14,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = Holder,
+    })
+    table.insert(
+        Library.PillCorners,
+        New("UICorner", {
+            CornerRadius = Library.CornerRadius > 0 and UDim.new(1, 0) or UDim.new(0, 0),
+            Parent = SearchBox,
+        })
+    )
+    New("UIPadding", {
+        PaddingLeft = UDim.new(0, 28),
+        PaddingRight = UDim.new(0, 10),
+        Parent = SearchBox,
+    })
+    New("UIStroke", { Color = "OutlineColor", Parent = SearchBox })
+
+    local NotifySearchIcon = Library:GetIcon("search")
+    if NotifySearchIcon then
+        local NotifySearchIconImage = New("ImageLabel", {
+            AnchorPoint = Vector2.new(0, 0.5),
+            BackgroundTransparency = 1,
+            ImageColor3 = "FontColor",
+            ImageTransparency = 0.5,
+            Position = UDim2.new(0, -18, 0.5, 0),
+            Size = UDim2.fromOffset(13, 13),
+            Parent = SearchBox,
+        })
+        Library:ApplyLucideIcon(NotifySearchIconImage, NotifySearchIcon)
+    end
+
+    Library:GiveSignal(SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+        Library.NotificationHistorySearchText = SearchBox.Text
+        Library:RefreshNotificationHistory()
+    end))
+
+    Library.NotificationHistorySearchBox = SearchBox
+
+    local Scroller = New("ScrollingFrame", {
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        CanvasSize = UDim2.fromScale(0, 0),
+        Position = UDim2.fromOffset(0, 35 + 34),
+        ScrollBarThickness = 4,
+        ScrollBarImageColor3 = "AccentColor",
+        Size = UDim2.new(1, 0, 1, -(35 + 34)),
+        Parent = Holder,
+    })
+
     local Scroller = New("ScrollingFrame", {
         AutomaticCanvasSize = Enum.AutomaticSize.Y,
         BackgroundTransparency = 1,
@@ -14805,38 +14866,30 @@ function Library:RefreshNotificationHistory()
     Library:_BuildNotificationHistory()
 
     local Scroller = Library.NotificationHistoryContainer
-    if not Scroller or not Scroller.Parent then
-        return
-    end
-
-    local SearchBox = Library.NotificationHistorySearchBox
-    if SearchBox and SearchBox.Parent and SearchBox.Text ~= (Library.NotificationHistorySearch or "") then
-        SearchBox.Text = Library.NotificationHistorySearch or ""
-    end
-
     for _, Child in Scroller:GetChildren() do
         if not (Child:IsA("UIListLayout") or Child:IsA("UIPadding")) then
             Child:Destroy()
         end
     end
 
-    local Search = NormalizeSearch((Library.NotificationHistorySearch or ""):lower())
-    local Filtered = {}
+    local Search = NormalizeSearch((Library.NotificationHistorySearchText or ""):lower())
+    local DisplayLimit = tonumber(Library.NotificationHistoryDisplayLimit) or 30
 
-    if Search == "" then
-        Filtered = Library.NotificationHistory
-    else
-        for _, Entry in Library.NotificationHistory do
-            if TryFuzzyMatch(tostring(Entry.Title or ""), Search)
-                or TryFuzzyMatch(tostring(Entry.Description or ""), Search)
-                or TryFuzzyMatch(tostring(Entry.Type or ""), Search)
-            then
-                table.insert(Filtered, Entry)
+    local VisibleEntries = {}
+    for _, Entry in Library.NotificationHistory do
+        local Matches = Search == ""
+            or TryFuzzyMatch(Entry.Title, Search)
+            or TryFuzzyMatch(Entry.Description, Search)
+
+        if Matches then
+            table.insert(VisibleEntries, Entry)
+            if #VisibleEntries >= DisplayLimit then
+                break
             end
         end
     end
 
-    if #Filtered == 0 then
+    if #VisibleEntries == 0 then
         New("TextLabel", {
             BackgroundTransparency = 1,
             Size = UDim2.new(1, 0, 0, 24),
@@ -14859,7 +14912,7 @@ function Library:RefreshNotificationHistory()
     local RenderLimit = tonumber(Library.NotificationHistoryRenderLimit) or 30
     local Rendered = 0
 
-    for _, Entry in Filtered do
+    for _, Entry in VisibleEntries do
         if Rendered >= RenderLimit then
             break
         end
@@ -17125,15 +17178,21 @@ function Library:CreateWindow(WindowInfo)
 
         if not GradientFrame then
             GradientFrame = New("Frame", {
+                Active = false,
                 BackgroundColor3 = Color3.new(1, 1, 1),
                 BackgroundTransparency = 0,
                 BorderSizePixel = 0,
                 Size = UDim2.fromScale(1, 1),
-                ZIndex = 0,
+                ZIndex = 90,
                 Parent = MainFrame,
             })
-            -- Put behind content
-            GradientFrame.ZIndex = 0
+            table.insert(
+                Library.Corners,
+                New("UICorner", {
+                    CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                    Parent = GradientFrame,
+                })
+            )
             local Gradient = New("UIGradient", {
                 Parent = GradientFrame,
             })
@@ -21146,6 +21205,14 @@ function Library:CreateWindow(WindowInfo)
 
     function Library:Toggle(Value: boolean?)
         return Window:Toggle(Value)
+    end
+
+    function Library:SetGlow(Enabled: boolean, Options: { [string]: any }?)
+        return Window:SetGlow(Enabled, Options)
+    end
+
+    function Library:SetGradient(Enabled: boolean, GradientInfo: { [string]: any }?)
+        return Window:SetGradient(Enabled, GradientInfo)
     end
 
     if WindowInfo.Minimizable and WindowInfo.MinimizeKeybind then
