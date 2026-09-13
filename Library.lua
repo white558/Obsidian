@@ -1988,7 +1988,7 @@ local function applyBackgroundTarget(Target, Asset)
         Bg.ClipsDescendants = true
         Bg.ZIndex = 0
         Bg.BackgroundTransparency = 1
-        Bg.ImageTransparency = 0.45
+        Bg.ImageTransparency = 0.2
 
         Bg.Image = Asset
 
@@ -2033,19 +2033,6 @@ function Library:RefreshBackgroundTargets()
 
     for Target in BackgroundTargets do
         pcall(applyBackgroundTarget, Target, Asset)
-    end
-
-    if Library.ScreenGui then
-        for _, Descendant in Library.ScreenGui:GetDescendants() do
-            if Descendant:IsA("ImageLabel") and (
-                Descendant.Name == "NotificationCustomBackground"
-                or Descendant.Name == "PopOutCustomBackground"
-                or Descendant.Name == "PopupCustomBackground"
-            ) then
-                Descendant.Image = Asset or ""
-                Descendant.Visible = Asset ~= nil
-            end
-        end
     end
 end
 
@@ -3083,42 +3070,7 @@ function Library:MakeBoxPopOut(Box: any, Options: {
             -- the automatic measurement and can make the pop-out explode in size.
             -- Keep the float on the normal themed background instead.
             Float.BackgroundColor3 = Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
-            Float.BackgroundTransparency = 0.28
-
-            -- Cropped background is a sibling so it never participates in AutomaticSize.
-            local FloatBackground = nil
-            local BackgroundAsset = getBackgroundAsset(Library.Scheme.BackgroundImage)
-            if BackgroundAsset then
-                FloatBackground = New("ImageLabel", {
-                    Name = "PopOutCustomBackground",
-                    Active = false,
-                    BackgroundTransparency = 1,
-                    Image = BackgroundAsset,
-                    ImageTransparency = 0.45,
-                    ScaleType = Enum.ScaleType.Crop,
-                    ClipsDescendants = true,
-                    Position = Float.Position,
-                    Size = Float.Size,
-                    ZIndex = 0,
-                    Parent = Floats,
-                })
-                local FloatCorner = New("UICorner", {
-                    CornerRadius = UDim.new(0, Library.CornerRadius),
-                    Parent = FloatBackground,
-                })
-                table.insert(Library.SpecificCorners, FloatCorner)
-
-                Float:GetPropertyChangedSignal("Position"):Connect(function()
-                    if FloatBackground and Float.Parent then
-                        FloatBackground.Position = Float.Position
-                    end
-                end)
-                Float:GetPropertyChangedSignal("Size"):Connect(function()
-                    if FloatBackground and Float.Parent then
-                        FloatBackground.Size = Float.Size
-                    end
-                end)
-            end
+            Float.BackgroundTransparency = 0
 
             FloatScale = New("UIScale", {
                 Parent = Float,
@@ -4176,7 +4128,6 @@ function Library:AddContextMenu(
             Parent = ParentGui,
         })
     end
-    Library:RegisterBackgroundTarget(Menu)
 
     table.insert(
         Library.Scales,
@@ -13896,47 +13847,7 @@ function Library:Notify(...)
         Parent = Holder,
     })
     Library:AddOutline(Holder)
-    Holder.BackgroundTransparency = 0.28
-
-    -- Keep the image outside the auto-sized card so it cannot change notification height.
-    local NotificationBackground
-    local NotificationAsset = getBackgroundAsset(Library.Scheme.BackgroundImage)
-    if NotificationAsset then
-        NotificationBackground = New("ImageLabel", {
-            Name = "NotificationCustomBackground",
-            Active = false,
-            BackgroundTransparency = 1,
-            Image = NotificationAsset,
-            ImageTransparency = 0.45,
-            ScaleType = Enum.ScaleType.Crop,
-            ClipsDescendants = true,
-            Position = Holder.Position,
-            Size = Holder.Size,
-            ZIndex = 4,
-            Parent = NotificationArea,
-        })
-        local NotificationImageCorner = New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius),
-            Parent = NotificationBackground,
-        })
-        table.insert(Library.SpecificCorners, NotificationImageCorner)
-        Holder:GetPropertyChangedSignal("Position"):Connect(function()
-            if NotificationBackground and Holder.Parent then
-                NotificationBackground.Position = Holder.Position
-            end
-        end)
-        Holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-            if NotificationBackground and Holder.Parent then
-                NotificationBackground.Size = UDim2.fromOffset(Holder.AbsoluteSize.X, Holder.AbsoluteSize.Y)
-            end
-        end)
-        task.defer(function()
-            if NotificationBackground and Holder.Parent then
-                NotificationBackground.Position = Holder.Position
-                NotificationBackground.Size = UDim2.fromOffset(Holder.AbsoluteSize.X, Holder.AbsoluteSize.Y)
-            end
-        end)
-    end
+    Holder.BackgroundTransparency = 0
 
     local ContentContainer = New("Frame", {
         BackgroundTransparency = 1,
@@ -14288,47 +14199,7 @@ function Library:CreatePopup(Info, Time)
         New("UICorner", { CornerRadius = UDim.new(0, Library.CornerRadius + 2), Parent = Card })
     )
     Library:AddOutline(Card)
-    Card.BackgroundTransparency = 0.28
-
-    -- Keep the image outside the AutomaticSize card so it cannot affect its height.
-    local PopupBackground
-    local PopupAsset = getBackgroundAsset(Library.Scheme.BackgroundImage)
-    if PopupAsset then
-        PopupBackground = New("ImageLabel", {
-            Name = "PopupCustomBackground",
-            Active = false,
-            BackgroundTransparency = 1,
-            Image = PopupAsset,
-            ImageTransparency = 0.45,
-            ScaleType = Enum.ScaleType.Crop,
-            ClipsDescendants = true,
-            Position = Card.Position,
-            Size = Card.Size,
-            ZIndex = 9,
-            Parent = PopupParent,
-        })
-        local PopupCorner = New("UICorner", {
-            CornerRadius = UDim.new(0, Library.CornerRadius + 2),
-            Parent = PopupBackground,
-        })
-        table.insert(Library.SpecificCorners, PopupCorner)
-        Card:GetPropertyChangedSignal("Position"):Connect(function()
-            if PopupBackground and Card.Parent then
-                PopupBackground.Position = Card.Position
-            end
-        end)
-        Card:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-            if PopupBackground and Card.Parent then
-                PopupBackground.Size = UDim2.fromOffset(Card.AbsoluteSize.X, Card.AbsoluteSize.Y)
-            end
-        end)
-        task.defer(function()
-            if PopupBackground and Card.Parent then
-                PopupBackground.Position = Card.Position
-                PopupBackground.Size = UDim2.fromOffset(Card.AbsoluteSize.X, Card.AbsoluteSize.Y)
-            end
-        end)
-    end
+    Card.BackgroundTransparency = 0
 
     local CardScale = New("UIScale", {
         Scale = 0.96,
@@ -15407,6 +15278,7 @@ function Library:CreateWindow(WindowInfo)
         })
         --// Elements defined outside CreateWindow need this to overlay the window
         Library.MainFrame = MainFrame
+        MainFrame.BackgroundTransparency = 0.22
         table.insert(
             Library.Corners,
             New("UICorner", {
@@ -16482,7 +16354,7 @@ function Library:CreateWindow(WindowInfo)
             AutomaticCanvasSize = Enum.AutomaticSize.Y,
             -- Let the main custom background image show through the tab area.
             BackgroundColor3 = "BackgroundColor",
-            BackgroundTransparency = 0.06,
+            BackgroundTransparency = 0.42,
             CanvasSize = UDim2.fromScale(0, 0),
             Position = UDim2.fromOffset(0, 49),
             ScrollBarThickness = 0,
@@ -16501,7 +16373,7 @@ function Library:CreateWindow(WindowInfo)
             BackgroundColor3 = function()
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, 1)
             end,
-            BackgroundTransparency = 0.06,
+            BackgroundTransparency = 0.42,
             ClipsDescendants = true,
             Name = "Container",
             Position = UDim2.new(1, 0, 0, 49),
