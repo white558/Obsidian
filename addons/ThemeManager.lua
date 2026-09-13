@@ -406,6 +406,10 @@ do
         --groupbox:AddInput("BackgroundImage", { Text = "Background Image:", Default = ""})
         --groupbox:AddToggle("WindowGlow", { Text = "Window Glow",  Default = self.Library.Scheme.WindowGlow })
         groupbox:AddDropdown("FontFace", { Text = "Font Face:", Default = "Code", Values = self.Fonts })
+        groupbox:AddToggle("ThemeManager_TransparentGUI", {
+            Text = "Transparent GUI",
+            Default = false,
+        })
 
         local ThemesArray = {}
         for Name, Theme in pairs(self.BuiltInThemes) do
@@ -642,6 +646,16 @@ do
             self.Library:SetFont(Enum.Font[Value])
             self.Library:UpdateColorsUsingRegistry()
         end)
+
+        local function UpdateTransparency(Value)
+            if self.Library.SetGUITransparency then
+                self.Library:SetGUITransparency(Value == true)
+            elseif self.Library.Window and self.Library.Window.SetGUITransparency then
+                self.Library.Window:SetGUITransparency(Value == true)
+            end
+        end
+        self.Library.Options.ThemeManager_TransparentGUI:OnChanged(UpdateTransparency)
+        UpdateTransparency(self.Library.Options.ThemeManager_TransparentGUI.Value)
     end
 
     function ThemeManager:CreateGroupBox(tab)

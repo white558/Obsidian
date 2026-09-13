@@ -205,11 +205,13 @@ local Library = {
 
     --// Notification History (built-in) \\--
     NotificationHistory = {},
-    NotificationHistoryLimit = 100,
+    NotificationHistoryLimit = 30,
     NotificationHistoryKeybind = Enum.KeyCode.RightAlt,
     NotificationHistoryFrame = nil,
     NotificationHistoryContainer = nil,
     NotificationHistoryOpen = false,
+    NotificationHistorySearchText = "",
+    NotificationHistorySearchBox = nil,
     NotificationHistoryRestPos = nil,
     NotificationUnreadCount = 0,
     NotificationBadge = nil,
@@ -1541,6 +1543,7 @@ function Library:UpdateColorsUsingRegistry()
             end
         end
     end
+
 end
 
 function Library:SetDPIScale(DPIScale: number)
@@ -14399,7 +14402,7 @@ function Library:AddNotificationToHistory(Entry)
 
     table.insert(Library.NotificationHistory, 1, Entry)
 
-    local Limit = tonumber(Library.NotificationHistoryLimit) or 100
+    local Limit = math.clamp(tonumber(Library.NotificationHistoryLimit) or 30, 1, 30)
     while #Library.NotificationHistory > Limit do
         table.remove(Library.NotificationHistory)
     end
@@ -14438,7 +14441,7 @@ end
 
 --// The panel drops down from underneath the notification bell. The draggable
 --// system uses top-left offset coordinates, so we compute an offset for it.
-local NOTIFY_HISTORY_SIZE = Vector2.new(288, 328)
+local NOTIFY_HISTORY_SIZE = Vector2.new(320, 360)
 --// Slides up toward the bell as it fades, so it reads as retracting into it
 local NOTIFY_HISTORY_SLIDE = UDim2.fromOffset(0, -22)
 local NotifyHistoryOpenTween = TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
@@ -14522,7 +14525,7 @@ function Library:_BuildNotificationHistory()
 
     local TitleLabel = New("TextLabel", {
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 34),
+        Size = UDim2.new(0, 128, 0, 34),
         Text = "Notification History",
         TextSize = 15,
         TextXAlignment = Enum.TextXAlignment.Left,
@@ -14530,9 +14533,41 @@ function Library:_BuildNotificationHistory()
     })
     New("UIPadding", {
         PaddingLeft = UDim.new(0, 12),
-        PaddingRight = UDim.new(0, 36),
         Parent = TitleLabel,
     })
+
+    --// Search/filter field for notification history. It searches title, description, type, and time.
+    local HistorySearchBox = New("TextBox", {
+        AnchorPoint = Vector2.new(0, 0.5),
+        BackgroundColor3 = "MainColor",
+        BackgroundTransparency = 0.15,
+        ClearTextOnFocus = false,
+        PlaceholderText = "Search history...",
+        Position = UDim2.new(0, 136, 0.5, 0),
+        Size = UDim2.new(1, -172, 0, 24),
+        Text = Library.NotificationHistorySearchText or "",
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 11,
+        Parent = Holder,
+    })
+    New("UIPadding", {
+        PaddingLeft = UDim.new(0, 8),
+        PaddingRight = UDim.new(0, 8),
+        Parent = HistorySearchBox,
+    })
+    table.insert(Library.Corners, New("UICorner", {
+        CornerRadius = UDim.new(0, math.max(2, Library.CornerRadius / 2)),
+        Parent = HistorySearchBox,
+    }))
+    Library:AddOutline(HistorySearchBox)
+    Library.NotificationHistorySearchBox = HistorySearchBox
+    Library:GiveSignal(HistorySearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+        Library.NotificationHistorySearchText = HistorySearchBox.Text
+        if Library.NotificationHistoryOpen then
+            Library:RefreshNotificationHistory()
+        end
+    end))
 
     Library:MakeLine(Holder, {
         Position = UDim2.fromOffset(0, 34),
@@ -14646,6 +14681,7 @@ function Library:RefreshNotificationHistory()
     Library:_BuildNotificationHistory()
 
     local Scroller = Library.NotificationHistoryContainer
+    local Search = string.lower(string.gsub(Library.NotificationHistorySearchText or "", "^%s*(.-)%s*$", "%1"))
     for _, Child in Scroller:GetChildren() do
         if not (Child:IsA("UIListLayout") or Child:IsA("UIPadding")) then
             Child:Destroy()
@@ -14672,7 +14708,56 @@ function Library:RefreshNotificationHistory()
     local SuccessColor = Library.NotificationTypeColors.Success or Color3.fromRGB(96, 216, 118)
     local Clipboard = (setclipboard or (typeof(toclipboard) == "function" and toclipboard) or (typeof(writeclipboard) == "function" and writeclipboard))
 
+    local MatchingCount = 0
+    if Search ~= "" then
+        for _, Entry in Library.NotificationHistory do
+            local Haystack = string.lower(table.concat({
+                tostring(Entry.Title or ""),
+                tostring(Entry.Description or ""),
+                tostring(Entry.Type or ""),
+                tostring(Entry.TimeString or ""),
+            }, " "))
+            if TryFuzzyMatch(Haystack, Search) then
+                MatchingCount += 1
+                if MatchingCount >= 30 then
+                    break
+                end
+            end
+        end
+        if MatchingCount == 0 then
+            New("TextLabel", {
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, 0, 0, 24),
+                Text = "No matching notifications.",
+                TextColor3 = "FontColor",
+                TextTransparency = 0.4,
+                TextSize = 14,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = Scroller,
+            })
+            return
+        end
+    end
+
+    local Displayed = 0
     for _, Entry in Library.NotificationHistory do
+        if Search ~= "" then
+            local Haystack = string.lower(table.concat({
+                tostring(Entry.Title or ""),
+                tostring(Entry.Description or ""),
+                tostring(Entry.Type or ""),
+                tostring(Entry.TimeString or ""),
+            }, " "))
+            if not TryFuzzyMatch(Haystack, Search) then
+                continue
+            end
+        end
+
+        Displayed += 1
+        if Displayed > 30 then
+            break
+        end
+
         local Card = New("TextButton", {
             AutomaticSize = Enum.AutomaticSize.Y,
             AutoButtonColor = false,
@@ -14999,8 +15084,8 @@ function Library:CreateWindow(WindowInfo)
     local GlowImage
     local GlowConfig = {
         Enabled = false,
-        Transparency = 0.4,
-        Radius = 18,
+        Transparency = 0.22,
+        Radius = 24,
         UseAccent = true,
     }
     local ShadowImage
@@ -15012,6 +15097,8 @@ function Library:CreateWindow(WindowInfo)
         Color = WindowInfo.ShadowColor or "DarkColor",
     }
     local GradientFrame
+    local GradientEnabled = false
+    local TransparentGUI = false
     local Tabs
     local Container
     local BackgroundImage
@@ -15061,6 +15148,7 @@ function Library:CreateWindow(WindowInfo)
                 return Library:GetBetterColor(Library.Scheme.BackgroundColor, -1)
             end,
             Name = "Main",
+            ZIndex = 1,
             Text = "",
             Position = WindowInfo.Position,
             Size = WindowInfo.Size,
@@ -16725,10 +16813,13 @@ function Library:CreateWindow(WindowInfo)
             ScaleType = Enum.ScaleType.Slice,
             SliceCenter = Rect.new(49, 49, 450, 450),
             Visible = false,
-            ZIndex = 0,
+            ZIndex = math.max(0, MainFrame.ZIndex - 1),
             Parent = ScreenGui,
         })
         UpdateGlowShape()
+        if GlowConfig.UseAccent then
+            SetGlowColor(nil)
+        end
 
         Library:GiveSignal(RunService.RenderStepped:Connect(function()
             if not (GlowImage and MainFrame) then
@@ -16739,7 +16830,7 @@ function Library:CreateWindow(WindowInfo)
             --// minimized pill when collapsed — so the accent glow stays with the UI.
             local Target = if (MiniFrame and MiniFrame.Visible) then MiniFrame else MainFrame
 
-            local ShouldShow = GlowConfig.Enabled and Target.Visible
+            local ShouldShow = GlowConfig.Enabled and Target.Visible and IsGuiEffectivelyVisible(Target)
             GlowImage.Visible = ShouldShow
             if not ShouldShow then
                 return
@@ -16880,14 +16971,59 @@ function Library:CreateWindow(WindowInfo)
         return Window
     end
 
-    --// Soft gradient overlay on the main window
+    function Window:SetGUITransparency(Enabled: boolean, Transparency: number?)
+        TransparentGUI = Enabled == true
+        WindowInfo.TransparentGUI = TransparentGUI
+
+        local Alpha = typeof(Transparency) == "number" and math.clamp(Transparency, 0, 0.95) or 0.28
+        if MainFrame then
+            MainFrame.BackgroundTransparency = TransparentGUI and Alpha or 0
+        end
+        if Tabs then
+            Tabs.BackgroundTransparency = TransparentGUI and math.min(1, Alpha + 0.08) or 0
+        end
+        if Container then
+            Container.BackgroundTransparency = TransparentGUI and math.min(1, Alpha + 0.04) or 0
+        end
+        if BottomBackground then
+            BottomBackground.BackgroundTransparency = TransparentGUI and math.min(1, Alpha + 0.04) or 0
+        end
+        return Window
+    end
+
+    Library.SetGUITransparency = function(_, Enabled, Transparency)
+        return Window:SetGUITransparency(Enabled, Transparency)
+    end
+
+    local function RefreshWindowGradient()
+        if not GradientFrame then
+            return
+        end
+        local Gradient = GradientFrame:FindFirstChildOfClass("UIGradient")
+        if not Gradient then
+            return
+        end
+        if not WindowInfo.GradientColorSequence then
+            Gradient.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Library.Scheme.AccentColor),
+                ColorSequenceKeypoint.new(1, Library.Scheme.BackgroundColor),
+            })
+        end
+    end
+
     function Window:SetGradient(Enabled: boolean, GradientInfo: { [string]: any }?)
         GradientInfo = typeof(GradientInfo) == "table" and GradientInfo or {}
         WindowInfo.Gradient = Enabled == true
+        GradientEnabled = WindowInfo.Gradient
 
         if not Enabled then
             if GradientFrame then
                 GradientFrame.Visible = false
+            end
+            if not TransparentGUI then
+                if Tabs then Tabs.BackgroundTransparency = 0 end
+                if Container then Container.BackgroundTransparency = 0 end
+                if BottomBackground then BottomBackground.BackgroundTransparency = 0 end
             end
             return Window
         end
@@ -16897,16 +17033,27 @@ function Library:CreateWindow(WindowInfo)
                 BackgroundColor3 = Color3.new(1, 1, 1),
                 BackgroundTransparency = 0,
                 BorderSizePixel = 0,
+                ClipsDescendants = true,
                 Size = UDim2.fromScale(1, 1),
                 ZIndex = 0,
                 Parent = MainFrame,
             })
             -- Put behind content
-            GradientFrame.ZIndex = 0
+            GradientFrame.ZIndex = MainFrame.ZIndex
             local Gradient = New("UIGradient", {
                 Parent = GradientFrame,
             })
             GradientFrame:SetAttribute("GradientRef", true)
+            Library:AddToRegistry(Gradient, { Color = function()
+                return WindowInfo.GradientColorSequence or ColorSequence.new({
+                    ColorSequenceKeypoint.new(0, Library.Scheme.AccentColor),
+                    ColorSequenceKeypoint.new(1, Library.Scheme.BackgroundColor),
+                })
+            end })
+            local MainCorner = MainFrame:FindFirstChildOfClass("UICorner")
+            if MainCorner then
+                New("UICorner", { CornerRadius = MainCorner.CornerRadius, Parent = GradientFrame })
+            end
         end
 
         local Gradient = GradientFrame:FindFirstChildOfClass("UIGradient")
@@ -16929,6 +17076,10 @@ function Library:CreateWindow(WindowInfo)
         end
 
         Gradient.Rotation = GradientInfo.Rotation or WindowInfo.GradientRotation or 35
+        if Tabs then Tabs.BackgroundTransparency = 1 end
+        if Container then Container.BackgroundTransparency = 1 end
+        if BottomBackground then BottomBackground.BackgroundTransparency = 1 end
+        RefreshWindowGradient()
         GradientFrame.Visible = true
 
         return Window
@@ -21136,6 +21287,10 @@ function Library:CreateWindow(WindowInfo)
             Transparency = WindowInfo.GradientTransparency,
             Rotation = WindowInfo.GradientRotation,
         })
+    end
+
+    if WindowInfo.TransparentGUI then
+        Window:SetGUITransparency(true)
     end
 
     return Window
