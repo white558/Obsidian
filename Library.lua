@@ -516,7 +516,16 @@ local Templates = {
 
         TabTransitionTime = 0.22,
         TabSwipeOffset = 26,
-        TabSwipeFrom = "bottom"
+        TabSwipeFrom = "bottom",
+        --// Main sidebar tab button styling (ported from devcomios)
+        TabButtonsStyle = {
+            Gap = 0,
+            Padding = 0,
+            CornerRadius = 0,
+            Indicator = false,
+            IndicatorWidth = 2,
+            IndicatorHeight = 20,
+        }
     },
     Groupbox = {
         Side = 1,
@@ -15063,6 +15072,7 @@ function Library:CreateWindow(WindowInfo)
         WindowInfo.Font = Font.fromEnum(WindowInfo.Font :: any)
     end
     WindowInfo.CornerRadius = math.min(WindowInfo.CornerRadius, 20)
+    local TabButtonsStyle = WindowInfo.TabButtonsStyle or Templates.Window.TabButtonsStyle
 
     --// Old Naming \\--
     if WindowInfo.Compact ~= nil then
@@ -15071,10 +15081,10 @@ function Library:CreateWindow(WindowInfo)
     if WindowInfo.SidebarMinWidth ~= nil then
         WindowInfo.MinSidebarWidth = WindowInfo.SidebarMinWidth
     end
-    WindowInfo.MinSidebarWidth = math.max(64, WindowInfo.MinSidebarWidth)
-    WindowInfo.SidebarCompactWidth = math.max(48, WindowInfo.SidebarCompactWidth)
+    WindowInfo.MinSidebarWidth = math.max(64 + TabButtonsStyle.Padding * 2, WindowInfo.MinSidebarWidth)
+    WindowInfo.SidebarCompactWidth = math.max(40 + TabButtonsStyle.Padding * 2, WindowInfo.SidebarCompactWidth)
     WindowInfo.SidebarCollapseThreshold = math.clamp(WindowInfo.SidebarCollapseThreshold, 0.1, 0.9)
-    WindowInfo.CompactWidthActivation = math.max(48, WindowInfo.CompactWidthActivation)
+    WindowInfo.CompactWidthActivation = math.max(40 + TabButtonsStyle.Padding * 2, WindowInfo.CompactWidthActivation)
     WindowInfo.SnapDistance = math.max(0, WindowInfo.SnapDistance)
     WindowInfo.SnapMargin = math.max(0, WindowInfo.SnapMargin)
 
@@ -16258,6 +16268,14 @@ function Library:CreateWindow(WindowInfo)
             Parent = MainFrame,
         })
         New("UIListLayout", {
+            Padding = UDim.new(0, TabButtonsStyle.Gap),
+            Parent = Tabs,
+        })
+        New("UIPadding", {
+            PaddingBottom = UDim.new(0, TabButtonsStyle.Padding),
+            PaddingLeft = UDim.new(0, TabButtonsStyle.Padding),
+            PaddingRight = UDim.new(0, TabButtonsStyle.Padding),
+            PaddingTop = UDim.new(0, TabButtonsStyle.Padding),
             Parent = Tabs,
         })
 
@@ -17623,6 +17641,25 @@ function Library:CreateWindow(WindowInfo)
                 Text = "",
                 Parent = TabHolder,
             })
+            New("UICorner", {
+                CornerRadius = UDim.new(0, TabButtonsStyle.CornerRadius),
+                Parent = TabButton,
+            })
+            local TabIndicator
+            if TabButtonsStyle.Indicator then
+                TabIndicator = New("Frame", {
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    BackgroundColor3 = "AccentColor",
+                    BackgroundTransparency = 1,
+                    Position = UDim2.new(0, -2, 0.5, 0),
+                    Size = UDim2.fromOffset(TabButtonsStyle.IndicatorWidth, TabButtonsStyle.IndicatorHeight),
+                    Parent = TabButton,
+                })
+                New("UICorner", {
+                    CornerRadius = UDim.new(1, 0),
+                    Parent = TabIndicator,
+                })
+            end
             local ButtonPadding = New("UIPadding", {
                 PaddingBottom = UDim.new(0, IsCompact and 6 or 11),
                 PaddingLeft = UDim.new(0, IsCompact and 6 or 12),
