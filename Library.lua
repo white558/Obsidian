@@ -17648,13 +17648,11 @@ function Library:CreateWindow(WindowInfo)
             })
             if TabButtonsStyle.Indicator then
                 TabIndicator = New("Frame", {
-                    AnchorPoint = Vector2.new(0, 0.5),
+                    AnchorPoint = Vector2.new(1, 0.5),
                     BackgroundColor3 = "AccentColor",
                     BackgroundTransparency = 1,
-                    BorderSizePixel = 0,
-                    Position = UDim2.new(0, 0, 0.5, 0),
+                    Position = UDim2.new(0, -2, 0.5, 0),
                     Size = UDim2.fromOffset(TabButtonsStyle.IndicatorWidth, TabButtonsStyle.IndicatorHeight),
-                    ZIndex = 10,
                     Parent = TabButton,
                 })
                 New("UICorner", {
@@ -20225,13 +20223,11 @@ function Library:CreateWindow(WindowInfo)
 
             if TabButtonsStyle.Indicator then
                 TabIndicator = New("Frame", {
-                    AnchorPoint = Vector2.new(0, 0.5),
+                    AnchorPoint = Vector2.new(1, 0.5),
                     BackgroundColor3 = "AccentColor",
                     BackgroundTransparency = 1,
-                    BorderSizePixel = 0,
-                    Position = UDim2.new(0, 0, 0.5, 0),
+                    Position = UDim2.new(0, -2, 0.5, 0),
                     Size = UDim2.fromOffset(TabButtonsStyle.IndicatorWidth, TabButtonsStyle.IndicatorHeight),
-                    ZIndex = 10,
                     Parent = TabButton,
                 })
                 New("UICorner", {
