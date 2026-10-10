@@ -17597,6 +17597,7 @@ function Library:CreateWindow(WindowInfo)
         local SingleColumn = IsSingleLayout(Layout)
 
         local TabButton: TextButton
+        local TabIndicator
         local TabLabel
         local TabIcon
 
@@ -17645,7 +17646,6 @@ function Library:CreateWindow(WindowInfo)
                 CornerRadius = UDim.new(0, TabButtonsStyle.CornerRadius),
                 Parent = TabButton,
             })
-            local TabIndicator
             if TabButtonsStyle.Indicator then
                 TabIndicator = New("Frame", {
                     AnchorPoint = Vector2.new(1, 0.5),
@@ -20008,6 +20008,12 @@ function Library:CreateWindow(WindowInfo)
             TweenService:Create(TabButton, Library.TweenInfo, {
                 BackgroundTransparency = 0,
             }):Play()
+
+            if TabIndicator then
+                TweenService:Create(TabIndicator, Library.TweenInfo, {
+                    BackgroundTransparency = 0,
+                }):Play()
+            end
             TweenService:Create(TabLabel, Library.TweenInfo, {
                 TextTransparency = 0,
             }):Play()
@@ -20039,6 +20045,12 @@ function Library:CreateWindow(WindowInfo)
             TweenService:Create(TabButton, Library.TweenInfo, {
                 BackgroundTransparency = 1,
             }):Play()
+
+            if TabIndicator then
+                TweenService:Create(TabIndicator, Library.TweenInfo, {
+                    BackgroundTransparency = 1,
+                }):Play()
+            end
 
             TweenService:Create(TabLabel, Library.TweenInfo, {
                 TextTransparency = 0.5,
@@ -20187,6 +20199,7 @@ function Library:CreateWindow(WindowInfo)
         Icon = Icon or "key"
 
         local TabButton: TextButton
+        local TabIndicator
         local TabLabel
         local TabIcon
 
@@ -20203,6 +20216,26 @@ function Library:CreateWindow(WindowInfo)
                 LayoutOrder = Order,
                 Parent = Tabs,
             })
+            New("UICorner", {
+                CornerRadius = UDim.new(0, TabButtonsStyle.CornerRadius),
+                Parent = TabButton,
+            })
+
+            if TabButtonsStyle.Indicator then
+                TabIndicator = New("Frame", {
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    BackgroundColor3 = "AccentColor",
+                    BackgroundTransparency = 1,
+                    Position = UDim2.new(0, -2, 0.5, 0),
+                    Size = UDim2.fromOffset(TabButtonsStyle.IndicatorWidth, TabButtonsStyle.IndicatorHeight),
+                    Parent = TabButton,
+                })
+                New("UICorner", {
+                    CornerRadius = UDim.new(1, 0),
+                    Parent = TabIndicator,
+                })
+            end
+
             local ButtonPadding = New("UIPadding", {
                 PaddingBottom = UDim.new(0, IsCompact and 6 or 11),
                 PaddingLeft = UDim.new(0, IsCompact and 6 or 12),
@@ -20438,6 +20471,12 @@ function Library:CreateWindow(WindowInfo)
                 BackgroundTransparency = 0,
             }):Play()
 
+            if TabIndicator then
+                TweenService:Create(TabIndicator, Library.TweenInfo, {
+                    BackgroundTransparency = 0,
+                }):Play()
+            end
+
             TweenService:Create(TabLabel, Library.TweenInfo, {
                 TextTransparency = 0,
             }):Play()
@@ -20466,6 +20505,12 @@ function Library:CreateWindow(WindowInfo)
             TweenService:Create(TabButton, Library.TweenInfo, {
                 BackgroundTransparency = 1,
             }):Play()
+
+            if TabIndicator then
+                TweenService:Create(TabIndicator, Library.TweenInfo, {
+                    BackgroundTransparency = 1,
+                }):Play()
+            end
 
             TweenService:Create(TabLabel, Library.TweenInfo, {
                 TextTransparency = 0.5,
